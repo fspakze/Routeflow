@@ -1,0 +1,18 @@
+# ===== ห้าม deploy: ข้อมูลลูกค้าจริง (ชื่อ/เบอร์/พิกัด 401 ร้าน) =====
+customers_import.sql
+mymaps_full.kml
+source.kmz
+kmz_extract/
+
+# ข้อมูล/สคริปต์ที่ไม่ต้องขึ้นเว็บ (เก็บไว้ในเครื่อง)
+import_customers.mjs
+schema.sql
+
+# ระบบ
+.DS_Store
+Thumbs.db
+node_modules/
+.env
+
+# หมายเหตุ: ไฟล์ .sql schema (schema.postgres.sql ฯลฯ) ไม่มีข้อมูลลูกค้า จึง commit ได้
+#          แต่ถ้าไม่อยากให้ขึ้นเว็บก็เพิ่มในนี้ได้

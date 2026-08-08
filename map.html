@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+<title>RouteFlow — แผนที่ร้านค้า</title>
+
+<!-- Leaflet -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+
+<style>
+  :root{
+    --bg:#fff7ed; --card:#ffffff; --line:#fed7aa; --ink:#1f2937; --muted:#6b7280;
+    --brand:#ea580c; --brand2:#f97316;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;font-family:"Segoe UI","Noto Sans Lao","Noto Sans Thai",system-ui,sans-serif;color:var(--ink);background:var(--bg)}
+  #app{height:100%;display:flex;flex-direction:column}
+
+  /* ---- Login / setup ---- */
+  #gate{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#fff7ed,#ffedd5);z-index:1000;padding:16px}
+  #gate .box{background:var(--card);border:1px solid var(--line);border-radius:16px;max-width:420px;width:100%;padding:24px;box-shadow:0 10px 40px rgba(234,88,12,.12)}
+  #gate h1{margin:0 0 4px;font-size:20px}
+  #gate p{margin:0 0 16px;color:var(--muted);font-size:13px}
+  #gate label{display:block;font-size:12px;color:var(--muted);margin:10px 0 4px}
+  #gate input{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;font-size:14px;outline:none}
+  #gate input:focus{border-color:var(--brand)}
+  #gate button{width:100%;margin-top:16px;padding:11px;border:0;border-radius:10px;background:var(--brand);color:#fff;font-size:15px;font-weight:600;cursor:pointer}
+  #gate button:disabled{opacity:.6;cursor:default}
+  #gate .hint{font-size:11px;color:var(--muted);margin-top:10px;line-height:1.5}
+  #gate .err{color:#dc2626;font-size:13px;margin-top:10px;min-height:18px}
+  details summary{cursor:pointer;font-size:12px;color:var(--brand);margin-top:12px}
+
+  /* ---- Top bar ---- */
+  header{display:flex;align-items:center;gap:12px;padding:10px 14px;background:var(--card);border-bottom:1px solid var(--line);flex-wrap:wrap}
+  header .logo{font-weight:800;color:var(--brand);font-size:16px}
+  header .stat{font-size:13px;color:var(--muted)}
+  header .stat b{color:var(--ink)}
+  header input[type=search]{flex:1;min-width:140px;padding:8px 12px;border:1px solid var(--line);border-radius:10px;font-size:14px;outline:none}
+  header .btn{padding:7px 12px;border:1px solid var(--line);background:#fff;border-radius:9px;font-size:13px;cursor:pointer;color:var(--ink)}
+
+  #map{flex:1;min-height:0}
+
+  /* ---- Legend ---- */
+  .legend{background:rgba(255,255,255,.96);border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:12px;line-height:1.7;max-height:46vh;overflow:auto;box-shadow:0 4px 16px rgba(0,0,0,.08)}
+  .legend h4{margin:0 0 6px;font-size:12px;color:var(--muted);font-weight:600}
+  .legend .row{display:flex;align-items:center;gap:7px;user-select:none}
+  .legend .row.off{opacity:.35}
+  .legend .sw{width:18px;height:18px;flex:none;display:flex;align-items:center;justify-content:center;cursor:pointer}
+  .legend .nm{cursor:pointer}
+  .legend .cnt{margin-left:auto;color:var(--muted)}
+  .legend .gear{cursor:pointer;opacity:.55;padding:0 2px}
+  .legend .gear:hover{opacity:1}
+  .rf-mk{background:none;border:none}
+  .rf-mk svg{display:block;filter:drop-shadow(0 1px 1px rgba(0,0,0,.35))}
+  /* ---- Style editor ---- */
+  .styleEditor{position:fixed;top:66px;right:16px;width:232px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px;z-index:1500;box-shadow:0 10px 30px rgba(0,0,0,.18);font-size:13px}
+  .styleEditor .se-head{font-weight:700;display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+  .styleEditor .se-x{cursor:pointer;color:var(--muted)}
+  .styleEditor label{display:block;font-size:11px;color:var(--muted);margin:8px 0 4px}
+  .se-colors{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+  .se-col{width:20px;height:20px;border-radius:50%;cursor:pointer;border:1px solid rgba(0,0,0,.15)}
+  #se-color{width:26px;height:26px;padding:0;border:none;background:none;cursor:pointer}
+  .se-shapes{display:flex;flex-wrap:wrap;gap:5px}
+  .se-shape{width:30px;height:30px;display:flex;align-items:center;justify-content:center;border:1px solid var(--line);border-radius:8px;cursor:pointer}
+  .se-shape.on{border-color:var(--brand);background:#fff7ed}
+  #se-size{width:100%}
+  .se-actions{display:flex;gap:8px;margin-top:12px}
+  .se-actions .btn{flex:1;padding:8px;border:0;border-radius:8px;background:var(--brand);color:#fff;font-weight:600;cursor:pointer;font-size:13px}
+  .se-actions .btn.ghost{background:#fff;border:1px solid var(--line);color:var(--ink);font-weight:500}
+  .leaflet-popup-content{font-size:13px;line-height:1.5}
+  .leaflet-popup-content b{font-size:14px}
+  .pin{color:var(--muted);font-size:12px}
+  .popup-btn{display:inline-block;margin-top:8px;padding:6px 10px;background:var(--brand);color:#fff;border-radius:8px;font-size:12px;text-decoration:none;font-weight:600}
+  @media(max-width:600px){ .legend{max-height:34vh;font-size:11px} .styleEditor{top:auto;bottom:10px;right:10px;left:10px;width:auto} }
+</style>
+</head>
+<body>
+<div id="app">
+  <!-- Gate: setup + login -->
+  <div id="gate">
+    <div class="box">
+      <h1>🚚 RouteFlow</h1>
+      <p>แผนที่ร้านค้า — เข้าสู่ระบบก่อนดูข้อมูล</p>
+
+      <div id="setupFields">
+        <label>Supabase Project URL</label>
+        <input id="sbUrl" placeholder="https://xxxx.supabase.co" autocomplete="off" />
+        <label>Supabase anon (public) key</label>
+        <input id="sbKey" placeholder="eyJhbGciOi..." autocomplete="off" />
+      </div>
+
+      <label>อีเมล</label>
+      <input id="email" type="email" placeholder="you@email.com" autocomplete="username" />
+      <label>รหัสผ่าน</label>
+      <input id="password" type="password" placeholder="••••••••" autocomplete="current-password" />
+
+      <button id="loginBtn">เข้าสู่ระบบ</button>
+      <div class="err" id="err"></div>
+
+      <details>
+        <summary>หา URL / anon key ได้ที่ไหน?</summary>
+        <div class="hint">
+          ใน Supabase → โปรเจกต์ Routeflow → <b>Project Settings → API</b><br>
+          • Project URL = ช่อง "Project URL"<br>
+          • anon key = ช่อง "Project API keys" → <b>anon public</b><br>
+          (anon key เปิดเผยได้ ปลอดภัยเพราะมี RLS ป้องกัน — ต้อง login ถึงอ่าน customers)<br><br>
+          ยังไม่มี user? สร้างที่ <b>Authentication → Users → Add user</b> (ใส่อีเมล+รหัส, ติ๊ก Auto Confirm)
+        </div>
+      </details>
+      <div class="hint" id="rememberNote"></div>
+    </div>
+  </div>
+
+  <!-- Main -->
+  <header style="display:none" id="bar">
+    <span class="logo">🚚 RouteFlow</span>
+    <span class="stat">ร้านทั้งหมด <b id="total">–</b></span>
+    <span class="stat">แสดง <b id="shown">–</b></span>
+    <input type="search" id="q" placeholder="ค้นหาชื่อ / รหัส FS- / เบอร์โทร..." />
+    <button class="btn" id="fitBtn">ดูทั้งหมด</button>
+    <button class="btn" id="logoutBtn">ออกจากระบบ</button>
+  </header>
+  <div id="map" style="display:none"></div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const $ = s => document.querySelector(s);
+const LS = { url:'rf_sb_url', key:'rf_sb_key' };
+
+// palette for categories (assigned in order of frequency)
+const PALETTE = ['#0f9d58','#0288d1','#f57c00','#9c27b0','#d81b60','#00897b',
+                 '#5e35b1','#c62828','#3949ab','#6d4c41','#00acc1','#7cb342',
+                 '#8d6e63','#e53935','#1e88e5','#fb8c00'];
+
+let sb=null, allRows=[], cluster=null, map=null, colorOf={}, groupLayers={}, hidden=new Set();
+let styleOf={}, _legendCats=[], _legendCounts={};
+const STYLE_LS='rf_marker_styles';
+const SHAPES=['circle','square','triangle','diamond','star','house','pin'];
+const SHAPE_LABEL={circle:'วงกลม',square:'สี่เหลี่ยม',triangle:'สามเหลี่ยม',diamond:'ข้าวหลามตัด',star:'ดาว',house:'บ้าน',pin:'หมุด'};
+
+// prefill saved config
+$('#sbUrl').value = localStorage.getItem(LS.url) || '';
+$('#sbKey').value = localStorage.getItem(LS.key) || '';
+
+$('#loginBtn').addEventListener('click', login);
+$('#password').addEventListener('keydown', e => { if(e.key==='Enter') login(); });
+
+async function login(){
+  const url=$('#sbUrl').value.trim(), key=$('#sbKey').value.trim();
+  const email=$('#email').value.trim(), pw=$('#password').value;
+  $('#err').textContent='';
+  if(!url||!key){ $('#err').textContent='กรอก Supabase URL และ anon key ก่อน'; return; }
+  if(!email||!pw){ $('#err').textContent='กรอกอีเมลและรหัสผ่าน'; return; }
+  $('#loginBtn').disabled=true; $('#loginBtn').textContent='กำลังเข้าสู่ระบบ...';
+  try{
+    sb = supabase.createClient(url, key);
+    const { error } = await sb.auth.signInWithPassword({ email, password: pw });
+    if(error) throw error;
+    localStorage.setItem(LS.url, url); localStorage.setItem(LS.key, key);
+    await start();
+  }catch(e){
+    $('#err').textContent = 'เข้าสู่ระบบไม่สำเร็จ: ' + (e.message||e);
+    $('#loginBtn').disabled=false; $('#loginBtn').textContent='เข้าสู่ระบบ';
+  }
+}
+
+async function start(){
+  const { data, error } = await sb.from('customers')
+    .select('id,name,code,category,address,phone,lat,lng')
+    .not('lat','is',null).not('lng','is',null)
+    .limit(5000);
+  if(error){ $('#err').textContent='โหลดข้อมูลไม่สำเร็จ: '+error.message;
+             $('#loginBtn').disabled=false; $('#loginBtn').textContent='เข้าสู่ระบบ'; return; }
+  allRows = data || [];
+  $('#gate').style.display='none';
+  $('#bar').style.display='flex';
+  $('#map').style.display='block';
+  buildMap();
+}
+
+function buildMap(){
+  map = L.map('map',{preferCanvas:true}).setView([15.11,105.82],13);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    {maxZoom:19, attribution:'© OpenStreetMap'}).addTo(map);
+
+  // assign styles by category frequency
+  const counts={};
+  allRows.forEach(r=>{ const c=r.category||'(ไม่ระบุ)'; counts[c]=(counts[c]||0)+1; });
+  const cats = Object.keys(counts).sort((a,b)=>counts[b]-counts[a]);
+  loadStyles(cats);
+
+  cluster = L.markerClusterGroup({ maxClusterRadius:45, spiderfyOnMaxZoom:true });
+  cats.forEach(c=> groupLayers[c]=[]);
+
+  allRows.forEach(r=>{
+    const cat=r.category||'(ไม่ระบุ)';
+    const m=L.marker([r.lat,r.lng],{icon:makeIcon(styleOf[cat])});
+    m._cat=cat; m._row=r;
+    m.bindPopup(popupHtml(r));
+    groupLayers[cat].push(m);
+    cluster.addLayer(m);
+  });
+  map.addLayer(cluster);
+
+  buildLegend(cats,counts);
+  $('#total').textContent = allRows.length;
+  updateShown();
+  fitMain();
+
+  $('#q').addEventListener('input', applyFilter);
+  $('#fitBtn').addEventListener('click', fitAll);
+  $('#logoutBtn').addEventListener('click', logout);
+}
+
+function popupHtml(r){
+  const ph = r.phone || r.address;
+  const phone = ph ? `<div class="pin">📞 ${escapeHtml(ph)}</div>` : '';
+  const code = r.code ? `<div class="pin">รหัส: <b>${escapeHtml(r.code)}</b></div>` : '';
+  return `<b>${escapeHtml(r.name||'-')}</b>
+    <div class="pin">${escapeHtml(r.category||'')}</div>
+    ${code}${phone}
+    <div class="pin">${r.lat.toFixed(5)}, ${r.lng.toFixed(5)}</div>
+    <a class="popup-btn" href="stores.html?id=${r.id}" target="_blank">📋 รายละเอียด / ประวัติซื้อ / แก้ไข</a>`;
+}
+
+function buildLegend(cats,counts){
+  _legendCats=cats; _legendCounts=counts;
+  const ctrl=L.control({position:'topright'});
+  ctrl.onAdd=function(){
+    const d=L.DomUtil.create('div','legend'); d.id='legendBox';
+    renderLegend(d);
+    L.DomEvent.disableClickPropagation(d);
+    return d;
+  };
+  ctrl.addTo(map);
+}
+function renderLegend(d){
+  d=d||document.getElementById('legendBox'); if(!d) return;
+  d.innerHTML='<h4>หมวดร้าน (คลิกชื่อ=ซ่อน/แสดง · ⚙=ปรับสไตล์)</h4>';
+  _legendCats.forEach(c=>{
+    const st=styleOf[c];
+    const row=document.createElement('div');
+    row.className='row'+(hidden.has(c)?' off':''); row.dataset.cat=c;
+    row.innerHTML=`<span class="sw">${svgFor(st.shape,st.color,16)}</span>
+      <span class="nm">${escapeHtml(c)}</span><span class="cnt">${_legendCounts[c]}</span>
+      <span class="gear" title="ปรับสี/ขนาด/รูปทรง">⚙</span>`;
+    row.querySelector('.nm').addEventListener('click',()=>toggleCat(c));
+    row.querySelector('.sw').addEventListener('click',()=>toggleCat(c));
+    row.querySelector('.gear').addEventListener('click',e=>{e.stopPropagation();openStyleEditor(c);});
+    d.appendChild(row);
+  });
+}
+
+function toggleCat(cat){
+  if(hidden.has(cat)){ hidden.delete(cat); groupLayers[cat].forEach(m=>cluster.addLayer(m)); }
+  else { hidden.add(cat); groupLayers[cat].forEach(m=>cluster.removeLayer(m)); }
+  renderLegend(); applyFilter();
+}
+
+/* ---------- marker style engine (สี/ขนาด/รูปทรง แบบ My Maps) ---------- */
+function defaultStyle(i){ return {color:PALETTE[i%PALETTE.length], size:24, shape:'circle'}; }
+function loadStyles(cats){
+  let saved={}; try{ saved=JSON.parse(localStorage.getItem(STYLE_LS)||'{}'); }catch(e){}
+  cats.forEach((c,i)=>{ styleOf[c]=Object.assign(defaultStyle(i), saved[c]||{}); colorOf[c]=styleOf[c].color; });
+}
+function saveStyles(){ localStorage.setItem(STYLE_LS, JSON.stringify(styleOf)); }
+function shapePath(shape){
+  switch(shape){
+    case 'square':   return '<rect x="3" y="3" width="18" height="18" rx="3"/>';
+    case 'triangle': return '<polygon points="12,3 22,21 2,21"/>';
+    case 'diamond':  return '<polygon points="12,2 22,12 12,22 2,12"/>';
+    case 'star':     return '<polygon points="12,2 14.7,8.6 21.8,9.2 16.4,13.9 18,20.8 12,17.1 6,20.8 7.6,13.9 2.2,9.2 9.3,8.6"/>';
+    case 'house':    return '<path d="M12 2.5 L21.5 11 H18 V21 H6 V11 H2.5 Z"/>';
+    case 'pin':      return '<path d="M12 2 C7.6 2 4 5.6 4 10 c0 5.6 8 11.5 8 11.5 s8-5.9 8-11.5 C20 5.6 16.4 2 12 2 z"/>';
+    default:         return '<circle cx="12" cy="12" r="9"/>';
+  }
+}
+function svgFor(shape,color,px){
+  const dot = shape==='pin' ? '<circle cx="12" cy="10" r="3.1" fill="#fff"/>' : '';
+  return `<svg width="${px}" height="${px}" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">`
+    + `<g fill="${color}" stroke="#fff" stroke-width="1.6" stroke-linejoin="round">${shapePath(shape)}</g>${dot}</svg>`;
+}
+function makeIcon(st){
+  const px=st.size, ay = st.shape==='pin' ? px : px/2;
+  return L.divIcon({ html:svgFor(st.shape,st.color,px), className:'rf-mk',
+    iconSize:[px,px], iconAnchor:[px/2,ay], popupAnchor:[0, -ay+2] });
+}
+function applyCatStyle(cat){
+  const ic=styleOf[cat]; colorOf[cat]=ic.color;
+  groupLayers[cat].forEach(m=>m.setIcon(makeIcon(ic)));
+  saveStyles(); renderLegend();
+}
+function openStyleEditor(cat){
+  closeStyleEditor();
+  const st=styleOf[cat];
+  const box=document.createElement('div'); box.className='styleEditor'; box.id='styleEditor';
+  box.innerHTML=`
+    <div class="se-head"><span>${escapeHtml(cat)}</span><span class="se-x">✕</span></div>
+    <label>สี</label>
+    <div class="se-colors">${PALETTE.map(col=>`<span class="se-col" data-col="${col}" style="background:${col};outline:${col===st.color?'2px solid #111':'none'};outline-offset:1px"></span>`).join('')}<input type="color" id="se-color" value="${st.color}" title="สีอื่น"></div>
+    <label>รูปทรง</label>
+    <div class="se-shapes">${SHAPES.map(sh=>`<span class="se-shape ${sh===st.shape?'on':''}" data-shape="${sh}" title="${SHAPE_LABEL[sh]}">${svgFor(sh,st.color,20)}</span>`).join('')}</div>
+    <label>ขนาด <b id="se-sizeval">${st.size}</b> px</label>
+    <input type="range" id="se-size" min="14" max="46" value="${st.size}">
+    <div class="se-actions"><button class="btn" id="se-done">เสร็จ</button><button class="btn ghost" id="se-reset">รีเซ็ต</button></div>`;
+  document.body.appendChild(box);
+  box.querySelector('.se-x').onclick=closeStyleEditor;
+  box.querySelector('#se-done').onclick=closeStyleEditor;
+  box.querySelectorAll('.se-col').forEach(s=>s.onclick=()=>{styleOf[cat].color=s.dataset.col;applyCatStyle(cat);refreshEditor(cat);});
+  box.querySelector('#se-color').oninput=e=>{styleOf[cat].color=e.target.value;applyCatStyle(cat);refreshEditor(cat);};
+  box.querySelectorAll('.se-shape').forEach(s=>s.onclick=()=>{styleOf[cat].shape=s.dataset.shape;applyCatStyle(cat);refreshEditor(cat);});
+  const sz=box.querySelector('#se-size');
+  sz.oninput=e=>{box.querySelector('#se-sizeval').textContent=e.target.value;styleOf[cat].size=+e.target.value;applyCatStyle(cat);};
+  box.querySelector('#se-reset').onclick=()=>{styleOf[cat]=defaultStyle(_legendCats.indexOf(cat));applyCatStyle(cat);openStyleEditor(cat);};
+}
+function refreshEditor(cat){
+  const ed=document.getElementById('styleEditor'); if(!ed) return;
+  ed.querySelectorAll('.se-shape').forEach(s=>{s.classList.toggle('on',s.dataset.shape===styleOf[cat].shape);s.innerHTML=svgFor(s.dataset.shape,styleOf[cat].color,20);});
+  ed.querySelectorAll('.se-col').forEach(s=>s.style.outline=(s.dataset.col===styleOf[cat].color?'2px solid #111':'none'));
+}
+function closeStyleEditor(){ const e=document.getElementById('styleEditor'); if(e)e.remove(); }
+
+function applyFilter(){
+  const q=$('#q').value.trim().toLowerCase();
+  Object.keys(groupLayers).forEach(cat=>{
+    groupLayers[cat].forEach(m=>{
+      const r=m._row;
+      const match = !q || (r.name||'').toLowerCase().includes(q) || (r.code||'').toLowerCase().includes(q)
+        || (r.address||'').toLowerCase().includes(q) || (r.phone||'').toLowerCase().includes(q);
+      const visible = match && !hidden.has(cat);
+      const on = cluster.hasLayer(m);
+      if(visible && !on) cluster.addLayer(m);
+      if(!visible && on) cluster.removeLayer(m);
+    });
+  });
+  updateShown();
+}
+
+function updateShown(){
+  let n=0; Object.keys(groupLayers).forEach(cat=>groupLayers[cat].forEach(m=>{ if(cluster.hasLayer(m)) n++; }));
+  $('#shown').textContent=n;
+}
+
+function fitAll(){
+  const pts=allRows.map(r=>[r.lat,r.lng]);
+  if(pts.length) map.fitBounds(pts,{padding:[40,40]});
+}
+// เปิดมาที่กลุ่มร้านหลัก — ตัด outlier (เช่น ร้านต่างแขวง) ด้วย percentile 2–98%
+function fitMain(){
+  if(!allRows.length) return;
+  const lats=allRows.map(r=>r.lat).sort((a,b)=>a-b);
+  const lngs=allRows.map(r=>r.lng).sort((a,b)=>a-b);
+  const q=(arr,p)=>arr[Math.min(arr.length-1,Math.max(0,Math.floor(arr.length*p)))];
+  map.fitBounds([[q(lats,0.02),q(lngs,0.02)],[q(lats,0.98),q(lngs,0.98)]],
+    {padding:[30,30],maxZoom:14});
+}
+
+async function logout(){ try{ await sb.auth.signOut(); }catch(e){} location.reload(); }
+
+function escapeHtml(s){ return (s==null?'':String(s)).replace(/[&<>"']/g,
+  m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+</script>
+</body>
+</html>

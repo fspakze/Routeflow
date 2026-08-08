@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>RouteFlow — วางแผน / จัดการ</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+<style>
+  :root{--bg:#fff7ed;--card:#fff;--line:#fed7aa;--ink:#1f2937;--muted:#6b7280;--brand:#ea580c;--ok:#0f9d58;--warn:#f59e0b;--bad:#dc2626}
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;font-family:"Segoe UI","Noto Sans Lao","Noto Sans Thai",system-ui,sans-serif;color:var(--ink);background:var(--bg)}
+  #app{height:100%;display:flex;flex-direction:column}
+  /* gate */
+  #gate{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#fff7ed,#ffedd5);z-index:2000;padding:16px}
+  #gate .box{background:var(--card);border:1px solid var(--line);border-radius:16px;max-width:420px;width:100%;padding:24px;box-shadow:0 10px 40px rgba(234,88,12,.12)}
+  #gate h1{margin:0 0 4px;font-size:20px}#gate p{margin:0 0 16px;color:var(--muted);font-size:13px}
+  #gate label{display:block;font-size:12px;color:var(--muted);margin:10px 0 4px}
+  #gate input{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;font-size:14px;outline:none}
+  #gate input:focus,input:focus,select:focus{border-color:var(--brand)}
+  #gate button{width:100%;margin-top:16px;padding:11px;border:0;border-radius:10px;background:var(--brand);color:#fff;font-size:15px;font-weight:600;cursor:pointer}
+  #gate .err,.err{color:var(--bad);font-size:13px;margin-top:8px;min-height:18px}
+  #gate .hint,.hint{font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5}
+  details summary{cursor:pointer;font-size:12px;color:var(--brand);margin-top:12px}
+  /* header + tabs */
+  header{display:flex;align-items:center;gap:12px;padding:9px 14px;background:var(--card);border-bottom:1px solid var(--line);flex-wrap:wrap}
+  header .logo{font-weight:800;color:var(--brand);font-size:16px}
+  header .me{font-size:12px;color:var(--muted);margin-left:auto}
+  .tabs{display:flex;gap:4px;padding:8px 14px 0;background:var(--card)}
+  .tabs button{padding:8px 16px;border:1px solid var(--line);border-bottom:0;background:#fff;border-radius:9px 9px 0 0;cursor:pointer;font-size:14px;color:var(--muted)}
+  .tabs button.active{color:var(--brand);font-weight:700;background:var(--bg)}
+  main{flex:1;min-height:0;overflow:auto;padding:16px}
+  .pane{display:none}.pane.active{display:block}
+  /* generic */
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:16px}
+  .card h3{margin:0 0 12px;font-size:15px}
+  .row{display:flex;gap:12px;flex-wrap:wrap}
+  .field{flex:1;min-width:150px}
+  label.fl{display:block;font-size:12px;color:var(--muted);margin:0 0 4px}
+  input,select{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:9px;font-size:14px;outline:none;background:#fff}
+  .btn{padding:9px 16px;border:0;border-radius:9px;background:var(--brand);color:#fff;font-weight:600;cursor:pointer;font-size:14px}
+  .btn.ghost{background:#fff;border:1px solid var(--line);color:var(--ink);font-weight:500}
+  .btn.sm{padding:5px 10px;font-size:12px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid #f3e8dd}
+  th{color:var(--muted);font-weight:600;font-size:12px}
+  .pill{display:inline-block;padding:2px 8px;border-radius:99px;font-size:11px;background:#ffedd5;color:var(--brand)}
+  .ok{color:var(--ok)}.muted{color:var(--muted)}
+  /* plan layout */
+  #planWrap{display:grid;grid-template-columns:1fr 360px;gap:16px}
+  #planMap{height:520px;border-radius:12px;border:1px solid var(--line)}
+  #stopList{max-height:300px;overflow:auto}
+  .stop{display:flex;align-items:center;gap:8px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;margin-bottom:6px;font-size:13px}
+  .stop .seq{width:22px;height:22px;border-radius:50%;background:var(--brand);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex:none}
+  .stop .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .stop .x{cursor:pointer;color:var(--bad);font-weight:700;padding:0 4px}
+  .stop .mv{cursor:pointer;color:var(--muted);padding:0 3px}
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#111827;color:#fff;padding:10px 18px;border-radius:10px;font-size:14px;z-index:3000;opacity:0;transition:.3s;pointer-events:none}
+  .toast.show{opacity:1}
+  @media(max-width:820px){#planWrap{grid-template-columns:1fr}#planMap{height:340px}}
+  /* marker + legend + style editor (เหมือน map.html) */
+  .rf-mk{background:none;border:none}
+  .rf-mk svg{display:block;filter:drop-shadow(0 1px 1px rgba(0,0,0,.35))}
+  .rf-sel{background:none;border:none}
+  .legend{background:rgba(255,255,255,.96);border:1px solid var(--line);border-radius:12px;padding:8px 10px;font-size:12px;line-height:1.6;max-height:44vh;overflow:auto;box-shadow:0 4px 16px rgba(0,0,0,.1)}
+  .legend h4{margin:0 0 6px;font-size:11px;color:var(--muted);font-weight:600}
+  .legend .lrow{display:flex;align-items:center;gap:6px;user-select:none}
+  .legend .lrow.off{opacity:.35}
+  .legend .sw{width:18px;height:18px;flex:none;display:flex;align-items:center;justify-content:center;cursor:pointer}
+  .legend .nm{cursor:pointer}.legend .cnt{margin-left:auto;color:var(--muted)}
+  .legend .gear{cursor:pointer;opacity:.55;padding:0 2px}.legend .gear:hover{opacity:1}
+  .styleEditor{position:fixed;top:120px;right:20px;width:232px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px;z-index:1500;box-shadow:0 10px 30px rgba(0,0,0,.18);font-size:13px}
+  .styleEditor .se-head{font-weight:700;display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+  .styleEditor .se-x{cursor:pointer;color:var(--muted)}
+  .styleEditor label{display:block;font-size:11px;color:var(--muted);margin:8px 0 4px}
+  .se-colors{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+  .se-col{width:20px;height:20px;border-radius:50%;cursor:pointer;border:1px solid rgba(0,0,0,.15)}
+  #se-color{width:26px;height:26px;padding:0;border:none;background:none;cursor:pointer}
+  .se-shapes{display:flex;flex-wrap:wrap;gap:5px}
+  .se-shape{width:30px;height:30px;display:flex;align-items:center;justify-content:center;border:1px solid var(--line);border-radius:8px;cursor:pointer}
+  .se-shape.on{border-color:var(--brand);background:#fff7ed}
+  #se-size{width:100%}
+  .se-actions{display:flex;gap:8px;margin-top:12px}
+  .se-actions .btn{flex:1;padding:8px;border-radius:8px}
+</style>
+</head>
+<body>
+<div id="app">
+  <!-- gate -->
+  <div id="gate"><div class="box">
+    <h1>🚚 RouteFlow — จัดการ</h1>
+    <p>เข้าสู่ระบบ (ต้องเป็น admin/manager)</p>
+    <label>Supabase URL</label><input id="sbUrl" placeholder="https://xxxx.supabase.co" />
+    <label>anon key</label><input id="sbKey" placeholder="eyJhbGciOi..." />
+    <label>อีเมล</label><input id="email" type="email" />
+    <label>รหัสผ่าน</label><input id="password" type="password" />
+    <button id="loginBtn">เข้าสู่ระบบ</button>
+    <div class="err" id="gerr"></div>
+    <div class="hint">ถ้ายังเขียนข้อมูลไม่ได้ = profile ยังไม่ใช่ admin (รัน SQL bootstrap ที่ Claude ให้ก่อน)</div>
+  </div></div>
+
+  <header style="display:none" id="bar">
+    <span class="logo">🚚 RouteFlow</span>
+    <a href="map.html" class="btn ghost sm" style="text-decoration:none">🗺️ แผนที่ร้าน</a>
+    <span class="me" id="me"></span>
+    <button class="btn ghost sm" id="logoutBtn">ออก</button>
+  </header>
+  <div class="tabs" id="tabs" style="display:none">
+    <button data-tab="plan" class="active">📋 วางแผน trip</button>
+    <button data-tab="veh">🚚 รถ</button>
+    <button data-tab="crew">👥 ทีมงาน</button>
+  </div>
+
+  <main id="main" style="display:none">
+    <!-- PLAN -->
+    <div class="pane active" id="pane-plan">
+      <div class="card">
+        <h3>1. ข้อมูล trip</h3>
+        <div class="row">
+          <div class="field"><label class="fl">วันที่ส่ง</label><input type="date" id="tDate"></div>
+          <div class="field"><label class="fl">เวลาออกตามแผน</label><input type="time" id="tTime" value="08:00"></div>
+          <div class="field"><label class="fl">รหัส trip</label><input id="tCode" placeholder="อัตโนมัติ"></div>
+          <div class="field"><label class="fl">รถ</label><select id="tVeh"></select></div>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <div class="field"><label class="fl">คลังต้นทาง (ชื่อ)</label><input id="tOrigin" value="คลัง Friendship SuperMart"></div>
+          <div class="field"><label class="fl">พิกัดต้นทาง (lat,lng)</label><input id="tOriginLL" placeholder="15.11,105.80"></div>
+        </div>
+        <div style="margin-top:10px"><label class="fl">ทีมงาน (เลือกอย่างน้อย 1 คนขับ)</label><div id="crewPick" class="row"></div></div>
+      </div>
+
+      <div class="card">
+        <h3>2. เลือกร้านที่จะไปส่ง — คลิกหมุดบนแผนที่เพื่อเพิ่ม/เอาออก</h3>
+        <div id="planWrap">
+          <div id="planMap"></div>
+          <div>
+            <div class="row" style="margin-bottom:8px">
+              <b style="flex:1">ลำดับส่ง (<span id="stopCount">0</span> ร้าน)</b>
+              <button class="btn ghost sm" id="clearStops">ล้าง</button>
+            </div>
+            <div id="stopList"><div class="muted" style="font-size:13px">ยังไม่เลือกร้าน — คลิกหมุดบนแผนที่</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="row" style="align-items:center">
+          <div style="flex:1" class="muted" id="planSummary">พร้อมบันทึก: เลือกรถ + คนขับ + ร้านอย่างน้อย 1 ร้าน</div>
+          <button class="btn" id="saveTrip">💾 บันทึก trip</button>
+        </div>
+        <div class="err" id="perr"></div>
+      </div>
+    </div>
+
+    <!-- VEHICLES -->
+    <div class="pane" id="pane-veh">
+      <div class="card">
+        <h3>เพิ่มรถ</h3>
+        <div class="row">
+          <div class="field"><label class="fl">ทะเบียน *</label><input id="vPlate" placeholder="กข 1234 / 2กมข-8821"></div>
+          <div class="field"><label class="fl">ยี่ห้อ/รุ่น</label><input id="vModel" placeholder="Toyota Hilux Revo"></div>
+          <div class="field"><label class="fl">ประเภท</label><input id="vType" placeholder="กระบะ 4 ล้อ"></div>
+          <div class="field"><label class="fl">บรรทุก (กก.)</label><input id="vCap" type="number"></div>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <div class="field"><label class="fl">หมดภาษี</label><input id="vTax" type="date"></div>
+          <div class="field"><label class="fl">หมดประกัน</label><input id="vIns" type="date"></div>
+          <div class="field" style="display:flex;align-items:flex-end"><button class="btn" id="addVeh">+ เพิ่มรถ</button></div>
+        </div>
+        <div class="err" id="verr"></div>
+      </div>
+      <div class="card"><h3>รถทั้งหมด</h3><div id="vehTable"></div></div>
+    </div>
+
+    <!-- CREW -->
+    <div class="pane" id="pane-crew">
+      <div class="card">
+        <h3>➕ เพิ่มทีมงานใหม่ (สร้างบัญชี login ให้เลย)</h3>
+        <div class="row">
+          <div class="field"><label class="fl">ชื่อ *</label><input id="uName" placeholder="ชื่อคนขับ/ผู้ช่วย"></div>
+          <div class="field"><label class="fl">อีเมล (ใช้ login) *</label><input id="uEmail" type="email" placeholder="driver1@email.com"></div>
+          <div class="field"><label class="fl">รหัสผ่าน * (≥6 ตัว)</label><input id="uPass" placeholder="ตั้งให้พนักงาน"></div>
+          <div class="field"><label class="fl">บทบาท</label><select id="uRole"><option value="driver">คนขับ (driver)</option><option value="helper">ผู้ช่วย (helper)</option><option value="manager">ผู้จัดการ (manager)</option><option value="viewer">ดูอย่างเดียว (viewer)</option></select></div>
+          <div class="field"><label class="fl">เบอร์โทร</label><input id="uPhone" placeholder="020xxxxxxx"></div>
+          <div class="field" style="display:flex;align-items:flex-end"><button class="btn" id="addUser">+ สร้างบัญชี</button></div>
+        </div>
+        <div class="err" id="uerr"></div>
+        <div class="hint">ระบบจะสร้างบัญชี login + โปรไฟล์ให้อัตโนมัติ (ยืนยันอีเมลให้เลย) พนักงานเอาอีเมล+รหัสไป login ใน PWA ได้ทันที</div>
+      </div>
+      <div class="card"><h3>ทีมงานทั้งหมด</h3><div id="crewTable"></div></div>
+      <div class="card">
+        <h3>⚠️ ต้อง deploy Edge Function ก่อนใช้ปุ่มนี้ (ครั้งเดียว)</h3>
+        <div class="hint" style="font-size:12px;line-height:1.7">
+          การสร้างบัญชีต้องผ่านฟังก์ชันฝั่งเซิร์ฟเวอร์ (เพื่อความปลอดภัย) — deploy ครั้งเดียว:<br>
+          <b>วิธีง่าย:</b> Supabase → <b>Edge Functions → Deploy a new function</b> → ชื่อ <code>admin-create-user</code> → วางโค้ดจากไฟล์ <code>supabase/functions/admin-create-user/index.ts</code> → Deploy<br>
+          (Supabase ใส่ key ที่จำเป็นให้อัตโนมัติ ไม่ต้องตั้งเอง)<br>
+          ถ้ายังไม่ deploy จะขึ้น error ตอนกดสร้าง — ระหว่างนั้นยังสร้าง user มือใน Supabase ได้เหมือนเดิม
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+<div class="toast" id="toast"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const $=s=>document.querySelector(s), $$=s=>document.querySelectorAll(s);
+const LS={url:'rf_sb_url',key:'rf_sb_key'};
+let sb=null, me=null, customers=[], vehicles=[], crew=[], selected=[], planMap=null, cluster=null, markerById={};
+const PALETTE=['#0f9d58','#0288d1','#f57c00','#9c27b0','#d81b60','#00897b','#5e35b1','#c62828','#3949ab','#6d4c41','#00acc1','#7cb342','#8d6e63','#e53935','#1e88e5','#fb8c00'];
+let colorOf={}, styleOf={}, hiddenCat=new Set(), _pcats=[];
+const STYLE_LS='rf_marker_styles';   // ใช้ร่วมกับ map.html
+const SHAPES=['circle','square','triangle','diamond','star','house','pin'];
+const SHAPE_LABEL={circle:'วงกลม',square:'สี่เหลี่ยม',triangle:'สามเหลี่ยม',diamond:'ข้าวหลามตัด',star:'ดาว',house:'บ้าน',pin:'หมุด'};
+
+$('#sbUrl').value=localStorage.getItem(LS.url)||''; $('#sbKey').value=localStorage.getItem(LS.key)||'';
+$('#loginBtn').onclick=login; $('#password').addEventListener('keydown',e=>{if(e.key==='Enter')login();});
+$('#tDate').value=new Date().toISOString().slice(0,10);
+
+async function login(){
+  const url=$('#sbUrl').value.trim(),key=$('#sbKey').value.trim(),email=$('#email').value.trim(),pw=$('#password').value;
+  $('#gerr').textContent='';
+  if(!url||!key||!email||!pw){$('#gerr').textContent='กรอกให้ครบ';return;}
+  $('#loginBtn').disabled=true;$('#loginBtn').textContent='กำลังเข้า...';
+  try{
+    sb=supabase.createClient(url,key);
+    const{error}=await sb.auth.signInWithPassword({email,password:pw});
+    if(error)throw error;
+    localStorage.setItem(LS.url,url);localStorage.setItem(LS.key,key);
+    const{data:{user}}=await sb.auth.getUser();
+    const{data:prof}=await sb.from('profiles').select('full_name,role').eq('id',user.id).maybeSingle();
+    me={id:user.id,...(prof||{})};
+    if(!prof){ $('#gerr').textContent='login สำเร็จ แต่ยังไม่มี profile — รัน SQL bootstrap สร้าง admin ก่อน';
+               $('#loginBtn').disabled=false;$('#loginBtn').textContent='เข้าสู่ระบบ'; return; }
+    $('#me').textContent=`${prof.full_name} · ${prof.role}`;
+    $('#gate').style.display='none';['#bar','#tabs','#main'].forEach(s=>$(s).style.display='');
+    $('#bar').style.display='flex';$('#tabs').style.display='flex';
+    await loadAll();
+  }catch(e){$('#gerr').textContent='เข้าไม่สำเร็จ: '+(e.message||e);$('#loginBtn').disabled=false;$('#loginBtn').textContent='เข้าสู่ระบบ';}
+}
+$('#logoutBtn').onclick=async()=>{await sb.auth.signOut();location.reload();};
+
+// tabs
+$$('.tabs button').forEach(b=>b.onclick=()=>{
+  $$('.tabs button').forEach(x=>x.classList.remove('active'));b.classList.add('active');
+  $$('.pane').forEach(p=>p.classList.remove('active'));$('#pane-'+b.dataset.tab).classList.add('active');
+  if(b.dataset.tab==='plan'&&planMap)setTimeout(()=>planMap.invalidateSize(),50);
+});
+
+async function loadAll(){
+  const[cRes,vRes,pRes]=await Promise.all([
+    sb.from('customers').select('id,name,code,category,lat,lng').not('lat','is',null).limit(5000),
+    sb.from('vehicles').select('*').order('plate_no'),
+    sb.from('profiles').select('id,full_name,role,phone').eq('is_active',true).order('role')
+  ]);
+  customers=cRes.data||[]; vehicles=vRes.data||[]; crew=pRes.data||[];
+  renderVehSelect(); renderCrewPick(); renderVehTable(); renderCrewTable(); buildPlanMap();
+}
+
+/* ---------- PLAN ---------- */
+function renderVehSelect(){
+  $('#tVeh').innerHTML = vehicles.length
+    ? vehicles.filter(v=>v.is_active).map(v=>`<option value="${v.id}">${esc(v.plate_no)} ${v.brand_model?'· '+esc(v.brand_model):''}</option>`).join('')
+    : '<option value="">— ยังไม่มีรถ (เพิ่มที่แท็บ รถ) —</option>';
+}
+function renderCrewPick(){
+  const pickable=crew.filter(c=>c.role==='driver'||c.role==='helper');
+  $('#crewPick').innerHTML = pickable.length
+    ? pickable.map(c=>`<label style="flex:none;display:flex;gap:6px;align-items:center;font-size:13px;border:1px solid var(--line);padding:6px 10px;border-radius:8px;cursor:pointer">
+        <input type="checkbox" style="width:auto" value="${c.id}" data-role="${c.role}"> ${esc(c.full_name)} <span class="pill">${c.role}</span></label>`).join('')
+    : '<span class="muted" style="font-size:13px">ยังไม่มีคนขับ/ผู้ช่วย — เพิ่มที่แท็บ ทีมงาน</span>';
+}
+function buildPlanMap(){
+  if(planMap){planMap.remove();planMap=null;}
+  planMap=L.map('planMap').setView([15.11,105.82],13);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OSM'}).addTo(planMap);
+  const counts={}; customers.forEach(c=>{const k=c.category||'(ไม่ระบุ)';counts[k]=(counts[k]||0)+1;});
+  _pcats=Object.keys(counts).sort((a,b)=>counts[b]-counts[a]); _pcounts=counts;
+  loadStyles(_pcats);
+  cluster=L.markerClusterGroup({maxClusterRadius:45});
+  markerById={};
+  customers.forEach(c=>{
+    const cat=c.category||'(ไม่ระบุ)';
+    const m=L.marker([c.lat,c.lng],{icon:makeIcon(styleOf[cat])});
+    m._c=c; m.bindTooltip(c.name,{direction:'top'});
+    m.on('click',()=>toggleStop(c));
+    markerById[c.id]=m; cluster.addLayer(m);
+  });
+  planMap.addLayer(cluster);
+  buildPlanLegend();
+  // ปักหมุดที่เลือกไว้ (ถ้ามี) ให้ยังคงสถานะ
+  refreshMarkers();
+  if(customers.length){
+    const lats=customers.map(c=>c.lat).sort((a,b)=>a-b), lngs=customers.map(c=>c.lng).sort((a,b)=>a-b);
+    const q=(a,p)=>a[Math.min(a.length-1,Math.max(0,Math.floor(a.length*p)))];
+    planMap.fitBounds([[q(lats,0.02),q(lngs,0.02)],[q(lats,0.98),q(lngs,0.98)]],{padding:[30,30],maxZoom:14});
+  }
+}
+let _pcounts={};
+function buildPlanLegend(){
+  const ctrl=L.control({position:'topright'});
+  ctrl.onAdd=function(){const d=L.DomUtil.create('div','legend');d.id='planLegend';renderPlanLegend(d);L.DomEvent.disableClickPropagation(d);return d;};
+  ctrl.addTo(planMap);
+}
+function renderPlanLegend(d){
+  d=d||document.getElementById('planLegend'); if(!d)return;
+  d.innerHTML='<h4>หมวด (คลิกชื่อ=ซ่อน · ⚙=ปรับสไตล์)</h4>';
+  _pcats.forEach(c=>{
+    const st=styleOf[c],row=document.createElement('div');
+    row.className='lrow'+(hiddenCat.has(c)?' off':'');
+    row.innerHTML=`<span class="sw">${svgFor(st.shape,st.color,16)}</span><span class="nm">${esc(c)}</span><span class="cnt">${_pcounts[c]}</span><span class="gear">⚙</span>`;
+    row.querySelector('.nm').onclick=()=>togglePlanCat(c);
+    row.querySelector('.sw').onclick=()=>togglePlanCat(c);
+    row.querySelector('.gear').onclick=e=>{e.stopPropagation();openStyleEditor(c);};
+    d.appendChild(row);
+  });
+}
+function togglePlanCat(c){
+  if(hiddenCat.has(c)){hiddenCat.delete(c);customers.filter(x=>(x.category||'(ไม่ระบุ)')===c).forEach(x=>{const m=markerById[x.id];if(m)cluster.addLayer(m);});}
+  else{hiddenCat.add(c);customers.filter(x=>(x.category||'(ไม่ระบุ)')===c).forEach(x=>{const m=markerById[x.id];if(m)cluster.removeLayer(m);});}
+  renderPlanLegend();
+}
+
+/* ---------- marker style engine (ใช้ร่วมกับ map.html ผ่าน localStorage) ---------- */
+function defaultStyle(i){return {color:PALETTE[i%PALETTE.length],size:24,shape:'circle'};}
+function loadStyles(cats){let saved={};try{saved=JSON.parse(localStorage.getItem(STYLE_LS)||'{}');}catch(e){}
+  cats.forEach((c,i)=>{styleOf[c]=Object.assign(defaultStyle(i),saved[c]||{});colorOf[c]=styleOf[c].color;});}
+function saveStyles(){localStorage.setItem(STYLE_LS,JSON.stringify(styleOf));}
+function shapePath(s){switch(s){
+  case 'square':return '<rect x="3" y="3" width="18" height="18" rx="3"/>';
+  case 'triangle':return '<polygon points="12,3 22,21 2,21"/>';
+  case 'diamond':return '<polygon points="12,2 22,12 12,22 2,12"/>';
+  case 'star':return '<polygon points="12,2 14.7,8.6 21.8,9.2 16.4,13.9 18,20.8 12,17.1 6,20.8 7.6,13.9 2.2,9.2 9.3,8.6"/>';
+  case 'house':return '<path d="M12 2.5 L21.5 11 H18 V21 H6 V11 H2.5 Z"/>';
+  case 'pin':return '<path d="M12 2 C7.6 2 4 5.6 4 10 c0 5.6 8 11.5 8 11.5 s8-5.9 8-11.5 C20 5.6 16.4 2 12 2 z"/>';
+  default:return '<circle cx="12" cy="12" r="9"/>';}}
+function svgFor(shape,color,px){const dot=shape==='pin'?'<circle cx="12" cy="10" r="3.1" fill="#fff"/>':'';
+  return `<svg width="${px}" height="${px}" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><g fill="${color}" stroke="#fff" stroke-width="1.6" stroke-linejoin="round">${shapePath(shape)}</g>${dot}</svg>`;}
+function makeIcon(st){const px=st.size,ay=st.shape==='pin'?px:px/2;
+  return L.divIcon({html:svgFor(st.shape,st.color,px),className:'rf-mk',iconSize:[px,px],iconAnchor:[px/2,ay],popupAnchor:[0,-ay+2]});}
+function makeSelIcon(seq){const px=30;
+  return L.divIcon({html:`<svg width="${px}" height="${px}" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="#ea580c" stroke="#fff" stroke-width="2"/><text x="12" y="16" font-size="11" font-weight="700" fill="#fff" text-anchor="middle">${seq}</text></svg>`,
+    className:'rf-sel',iconSize:[px,px],iconAnchor:[px/2,px/2]});}
+function refreshMarkers(){
+  Object.values(markerById).forEach(m=>{const cat=m._c.category||'(ไม่ระบุ)';m.setIcon(makeIcon(styleOf[cat]));});
+  selected.forEach((s,i)=>{const m=markerById[s.id];if(m)m.setIcon(makeSelIcon(i+1));});
+}
+function applyCatStyle(cat){const ic=styleOf[cat];colorOf[cat]=ic.color;
+  customers.filter(x=>(x.category||'(ไม่ระบุ)')===cat).forEach(x=>{const m=markerById[x.id];if(m&&!selected.find(s=>s.id===x.id))m.setIcon(makeIcon(ic));});
+  saveStyles();renderPlanLegend();}
+function openStyleEditor(cat){closeStyleEditor();const st=styleOf[cat];
+  const box=document.createElement('div');box.className='styleEditor';box.id='styleEditor';
+  box.innerHTML=`<div class="se-head"><span>${esc(cat)}</span><span class="se-x">✕</span></div>
+    <label>สี</label><div class="se-colors">${PALETTE.map(col=>`<span class="se-col" data-col="${col}" style="background:${col};outline:${col===st.color?'2px solid #111':'none'};outline-offset:1px"></span>`).join('')}<input type="color" id="se-color" value="${st.color}"></div>
+    <label>รูปทรง</label><div class="se-shapes">${SHAPES.map(sh=>`<span class="se-shape ${sh===st.shape?'on':''}" data-shape="${sh}" title="${SHAPE_LABEL[sh]}">${svgFor(sh,st.color,20)}</span>`).join('')}</div>
+    <label>ขนาด <b id="se-sizeval">${st.size}</b> px</label><input type="range" id="se-size" min="14" max="46" value="${st.size}">
+    <div class="se-actions"><button class="btn" id="se-done">เสร็จ</button><button class="btn ghost" id="se-reset">รีเซ็ต</button></div>`;
+  document.body.appendChild(box);
+  box.querySelector('.se-x').onclick=closeStyleEditor;box.querySelector('#se-done').onclick=closeStyleEditor;
+  box.querySelectorAll('.se-col').forEach(s=>s.onclick=()=>{styleOf[cat].color=s.dataset.col;applyCatStyle(cat);refreshEditor(cat);});
+  box.querySelector('#se-color').oninput=e=>{styleOf[cat].color=e.target.value;applyCatStyle(cat);refreshEditor(cat);};
+  box.querySelectorAll('.se-shape').forEach(s=>s.onclick=()=>{styleOf[cat].shape=s.dataset.shape;applyCatStyle(cat);refreshEditor(cat);});
+  box.querySelector('#se-size').oninput=e=>{box.querySelector('#se-sizeval').textContent=e.target.value;styleOf[cat].size=+e.target.value;applyCatStyle(cat);};
+  box.querySelector('#se-reset').onclick=()=>{styleOf[cat]=defaultStyle(_pcats.indexOf(cat));applyCatStyle(cat);openStyleEditor(cat);};
+}
+function refreshEditor(cat){const ed=document.getElementById('styleEditor');if(!ed)return;
+  ed.querySelectorAll('.se-shape').forEach(s=>{s.classList.toggle('on',s.dataset.shape===styleOf[cat].shape);s.innerHTML=svgFor(s.dataset.shape,styleOf[cat].color,20);});
+  ed.querySelectorAll('.se-col').forEach(s=>s.style.outline=(s.dataset.col===styleOf[cat].color?'2px solid #111':'none'));}
+function closeStyleEditor(){const e=document.getElementById('styleEditor');if(e)e.remove();}
+function toggleStop(c){
+  const i=selected.findIndex(s=>s.id===c.id);
+  if(i>=0)selected.splice(i,1); else selected.push(c);
+  renderStops();
+}
+function renderStops(){
+  const el=$('#stopList');
+  if(!selected.length){el.innerHTML='<div class="muted" style="font-size:13px">ยังไม่เลือกร้าน — คลิกหมุดบนแผนที่</div>';}
+  else{
+    el.innerHTML=selected.map((s,i)=>`<div class="stop">
+      <span class="seq">${i+1}</span><span class="nm">${esc(s.name)}${s.code?' · '+esc(s.code):''}</span>
+      <span class="mv" data-up="${i}">▲</span><span class="mv" data-dn="${i}">▼</span>
+      <span class="x" data-rm="${i}">✕</span></div>`).join('');
+  }
+  $('#stopCount').textContent=selected.length;
+  refreshMarkers();
+  el.querySelectorAll('[data-rm]').forEach(b=>b.onclick=()=>{selected.splice(+b.dataset.rm,1);renderStops();});
+  el.querySelectorAll('[data-up]').forEach(b=>b.onclick=()=>{const i=+b.dataset.up;if(i>0){[selected[i-1],selected[i]]=[selected[i],selected[i-1]];renderStops();}});
+  el.querySelectorAll('[data-dn]').forEach(b=>b.onclick=()=>{const i=+b.dataset.dn;if(i<selected.length-1){[selected[i+1],selected[i]]=[selected[i],selected[i+1]];renderStops();}});
+  updatePlanSummary();
+}
+$('#clearStops').onclick=()=>{selected=[];renderStops();};
+function updatePlanSummary(){
+  const nCrew=$$('#crewPick input:checked').length;
+  $('#planSummary').textContent=`รถ ${vehicles.length?'✓':'✗'} · คนขับเลือก ${nCrew} · ร้าน ${selected.length}`;
+}
+$('#crewPick').addEventListener('change',updatePlanSummary);
+
+function genCode(d){const ds=d.replace(/-/g,'');const r=Math.floor(Math.random()*900+100);return `TRIP-${ds}-${r}`;}
+$('#saveTrip').onclick=saveTrip;
+async function saveTrip(){
+  $('#perr').textContent='';
+  const date=$('#tDate').value, vehId=$('#tVeh').value;
+  const crewSel=[...$$('#crewPick input:checked')].map(i=>({id:i.value,role:i.dataset.role}));
+  if(!date){$('#perr').textContent='เลือกวันที่';return;}
+  if(!vehId){$('#perr').textContent='เลือกรถ';return;}
+  if(!crewSel.some(c=>c.role==='driver')){$('#perr').textContent='ต้องมีคนขับ (driver) อย่างน้อย 1 คน';return;}
+  if(!selected.length){$('#perr').textContent='เลือกร้านอย่างน้อย 1 ร้าน';return;}
+  let code=$('#tCode').value.trim()||genCode(date);
+  let originLat=null,originLng=null;
+  const ll=$('#tOriginLL').value.trim();
+  if(ll){const p=ll.split(',');originLat=parseFloat(p[0]);originLng=parseFloat(p[1]);}
+  const departISO=$('#tTime').value?new Date(`${date}T${$('#tTime').value}:00`).toISOString():null;
+  $('#saveTrip').disabled=true;$('#saveTrip').textContent='กำลังบันทึก...';
+  try{
+    const{data:trip,error:e1}=await sb.from('trips').insert({
+      trip_code:code,trip_date:date,vehicle_id:+vehId,
+      origin_name:$('#tOrigin').value.trim()||null,origin_lat:originLat,origin_lng:originLng,
+      planned_depart:departISO,planned_stops:selected.length,status:'planned',created_by:me.id
+    }).select('id').single();
+    if(e1)throw e1;
+    const{error:e2}=await sb.from('trip_crew').insert(crewSel.map(c=>({trip_id:trip.id,user_id:c.id,crew_role:c.role})));
+    if(e2)throw e2;
+    const{error:e3}=await sb.from('trip_stops').insert(selected.map((s,i)=>({trip_id:trip.id,customer_id:s.id,seq:i+1})));
+    if(e3)throw e3;
+    toast('✅ บันทึก trip '+code+' แล้ว ('+selected.length+' ร้าน)');
+    selected=[];renderStops();$('#tCode').value='';
+  }catch(e){$('#perr').textContent='บันทึกไม่สำเร็จ: '+(e.message||e);}
+  $('#saveTrip').disabled=false;$('#saveTrip').textContent='💾 บันทึก trip';
+}
+
+/* ---------- VEHICLES ---------- */
+$('#addVeh').onclick=async()=>{
+  $('#verr').textContent='';
+  const plate=$('#vPlate').value.trim(); if(!plate){$('#verr').textContent='ใส่ทะเบียน';return;}
+  const rec={plate_no:plate,brand_model:$('#vModel').value.trim()||null,vehicle_type:$('#vType').value.trim()||null,
+    capacity_kg:$('#vCap').value?+$('#vCap').value:null,tax_expiry:$('#vTax').value||null,insurance_expiry:$('#vIns').value||null};
+  const{error}=await sb.from('vehicles').insert(rec);
+  if(error){$('#verr').textContent='เพิ่มไม่สำเร็จ: '+error.message;return;}
+  ['#vPlate','#vModel','#vType','#vCap','#vTax','#vIns'].forEach(s=>$(s).value='');
+  toast('✅ เพิ่มรถแล้ว'); await loadAll();
+};
+function renderVehTable(){
+  const el=$('#vehTable');
+  if(!vehicles.length){el.innerHTML='<div class="muted">ยังไม่มีรถ</div>';return;}
+  el.innerHTML=`<table><tr><th>ทะเบียน</th><th>รุ่น</th><th>ประเภท</th><th>บรรทุก</th><th>หมดภาษี</th><th>หมดประกัน</th><th></th></tr>
+  ${vehicles.map(v=>`<tr><td><b>${esc(v.plate_no)}</b></td><td>${esc(v.brand_model||'-')}</td><td>${esc(v.vehicle_type||'-')}</td>
+    <td>${v.capacity_kg||'-'}</td><td>${v.tax_expiry||'-'}</td><td>${v.insurance_expiry||'-'}</td>
+    <td><button class="btn ghost sm" data-del="${v.id}">ลบ</button></td></tr>`).join('')}</table>`;
+  el.querySelectorAll('[data-del]').forEach(b=>b.onclick=async()=>{
+    if(!confirm('ลบรถนี้?'))return;
+    const{error}=await sb.from('vehicles').delete().eq('id',b.dataset.del);
+    if(error)toast('ลบไม่ได้: '+error.message); else{toast('ลบแล้ว');await loadAll();}
+  });
+}
+/* ---------- CREW ---------- */
+$('#addUser').onclick=async()=>{
+  $('#uerr').textContent='';
+  const full_name=$('#uName').value.trim(),email=$('#uEmail').value.trim(),password=$('#uPass').value,
+        role=$('#uRole').value,phone=$('#uPhone').value.trim();
+  if(!full_name||!email||!password){$('#uerr').textContent='กรอกชื่อ/อีเมล/รหัสผ่านให้ครบ';return;}
+  if(password.length<6){$('#uerr').textContent='รหัสผ่านอย่างน้อย 6 ตัว';return;}
+  $('#addUser').disabled=true;$('#addUser').textContent='กำลังสร้าง...';
+  try{
+    const{data,error}=await sb.functions.invoke('admin-create-user',{body:{email,password,full_name,role,phone}});
+    if(error){ // อ่านข้อความ error จาก function ถ้ามี
+      let msg=error.message;
+      try{const c=await error.context.json();if(c&&c.error)msg=c.error;}catch(e){}
+      throw new Error(msg);
+    }
+    if(data&&data.error)throw new Error(data.error);
+    if(!data||data.ok!==true)throw new Error('ฟังก์ชันไม่ได้สร้าง user จริง — โค้ดที่ deploy ยังเป็น template เดิม ไม่ใช่ admin-create-user');
+    ['#uName','#uEmail','#uPass','#uPhone'].forEach(s=>$(s).value='');
+    toast('✅ สร้างบัญชี '+full_name+' แล้ว'); await loadAll();
+  }catch(e){
+    const m=(e.message||String(e));
+    $('#uerr').textContent = m.includes('Failed to send')||m.includes('not found')||m.includes('404')
+      ? 'เรียกฟังก์ชันไม่ได้ — ยังไม่ได้ deploy "admin-create-user" (ดูวิธีด้านล่าง)'
+      : 'สร้างไม่สำเร็จ: '+m;
+  }
+  $('#addUser').disabled=false;$('#addUser').textContent='+ สร้างบัญชี';
+};
+function renderCrewTable(){
+  const el=$('#crewTable');
+  if(!crew.length){el.innerHTML='<div class="muted">ยังไม่มีทีมงาน — เพิ่มด้านบน</div>';return;}
+  el.innerHTML=`<table><tr><th>ชื่อ</th><th>บทบาท</th><th>เบอร์</th></tr>
+  ${crew.map(c=>`<tr><td>${esc(c.full_name)}</td><td><span class="pill">${c.role}</span></td><td>${esc(c.phone||'-')}</td></tr>`).join('')}</table>`;
+}
+/* ---------- utils ---------- */
+function esc(s){return(s==null?'':String(s)).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
+let tT;function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('show');clearTimeout(tT);tT=setTimeout(()=>t.classList.remove('show'),2600);}
+</script>
+</body>
+</html>

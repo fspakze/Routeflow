@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>RouteFlow — ระบบจัดการเส้นทางส่งของ</title>
+<style>
+  :root{--bg:#fff7ed;--card:#fff;--line:#fee2c7;--ink:#28211c;--muted:#8a7f76;--brand:#ea580c;--brand2:#f97316}
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;font-family:"Segoe UI","Noto Sans Lao","Noto Sans Thai",system-ui,sans-serif;color:var(--ink);
+    background:linear-gradient(135deg,#fff7ed,#ffedd5);display:flex;align-items:center;justify-content:center;padding:24px}
+  .wrap{max-width:820px;width:100%}
+  .head{text-align:center;margin-bottom:28px}
+  .mk{width:64px;height:64px;border-radius:18px;background:linear-gradient(135deg,var(--brand),var(--brand2));display:inline-flex;align-items:center;justify-content:center;font-size:34px;color:#fff;box-shadow:0 8px 24px rgba(234,88,12,.3)}
+  h1{margin:14px 0 4px;font-size:26px}
+  .head p{color:var(--muted);margin:0}
+  .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
+  a.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px;text-decoration:none;color:var(--ink);
+    display:flex;gap:14px;align-items:flex-start;transition:.15s;box-shadow:0 2px 10px rgba(0,0,0,.03)}
+  a.card:hover{border-color:var(--brand);transform:translateY(-2px);box-shadow:0 8px 22px rgba(234,88,12,.12)}
+  .ic{width:48px;height:48px;border-radius:13px;background:#ffedd5;color:var(--brand);display:flex;align-items:center;justify-content:center;font-size:24px;flex:none}
+  .card b{font-size:16px}.card span{display:block;color:var(--muted);font-size:13px;margin-top:3px}
+  .foot{text-align:center;color:var(--muted);font-size:12px;margin-top:24px}
+  @media(max-width:600px){.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="head"><div class="mk">🚚</div><h1>RouteFlow</h1><p>ระบบจัดการเส้นทางส่งของ · Friendship SuperMart ปากเซ</p></div>
+    <div class="grid">
+      <a class="card" href="dashboard.html"><div class="ic">📊</div><div><b>แดชบอร์ดผู้จัดการ</b><span>ดู trip สด · แผน vs จริง · นอกเส้นทาง · timeline</span></div></a>
+      <a class="card" href="driver.html"><div class="ic">🧑‍✈️</div><div><b>แอปคนขับ (PWA)</b><span>ออกเดินทาง · เก็บ GPS · เช็คอิน · ถ่ายรูปส่ง</span></div></a>
+      <a class="card" href="admin.html"><div class="ic">🗺️</div><div><b>วางแผน / รถ / ทีมงาน</b><span>สร้าง trip · เลือกร้าน · จัดการรถ+คนขับ</span></div></a>
+      <a class="card" href="stores.html"><div class="ic">🏪</div><div><b>จัดการร้านค้า</b><span>เพิ่ม/แก้ร้าน · รูปหน้าร้าน · ประวัติซื้อ</span></div></a>
+      <a class="card" href="map.html"><div class="ic">📍</div><div><b>แผนที่ร้านค้า</b><span>ดูร้านทั้งหมด · ปรับสี/รูปทรงหมุด · ค้นหา</span></div></a>
+    </div>
+    <div class="foot">© Friendship Group · RouteFlow v1.0 · OpenStreetMap + Supabase</div>
+  </div>
+</body>
+</html>

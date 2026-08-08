@@ -85,13 +85,6 @@
       <h1>🚚 RouteFlow</h1>
       <p>แผนที่ร้านค้า — เข้าสู่ระบบก่อนดูข้อมูล</p>
 
-      <div id="setupFields">
-        <label>Supabase Project URL</label>
-        <input id="sbUrl" placeholder="https://xxxx.supabase.co" autocomplete="off" />
-        <label>Supabase anon (public) key</label>
-        <input id="sbKey" placeholder="eyJhbGciOi..." autocomplete="off" />
-      </div>
-
       <label>อีเมล</label>
       <input id="email" type="email" placeholder="you@email.com" autocomplete="username" />
       <label>รหัสผ่าน</label>
@@ -99,18 +92,6 @@
 
       <button id="loginBtn">เข้าสู่ระบบ</button>
       <div class="err" id="err"></div>
-
-      <details>
-        <summary>หา URL / anon key ได้ที่ไหน?</summary>
-        <div class="hint">
-          ใน Supabase → โปรเจกต์ Routeflow → <b>Project Settings → API</b><br>
-          • Project URL = ช่อง "Project URL"<br>
-          • anon key = ช่อง "Project API keys" → <b>anon public</b><br>
-          (anon key เปิดเผยได้ ปลอดภัยเพราะมี RLS ป้องกัน — ต้อง login ถึงอ่าน customers)<br><br>
-          ยังไม่มี user? สร้างที่ <b>Authentication → Users → Add user</b> (ใส่อีเมล+รหัส, ติ๊ก Auto Confirm)
-        </div>
-      </details>
-      <div class="hint" id="rememberNote"></div>
     </div>
   </div>
 
@@ -129,6 +110,7 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
 <script>
 const $ = s => document.querySelector(s);
 const LS = { url:'rf_sb_url', key:'rf_sb_key' };
@@ -144,25 +126,20 @@ const STYLE_LS='rf_marker_styles';
 const SHAPES=['circle','square','triangle','diamond','star','house','pin'];
 const SHAPE_LABEL={circle:'วงกลม',square:'สี่เหลี่ยม',triangle:'สามเหลี่ยม',diamond:'ข้าวหลามตัด',star:'ดาว',house:'บ้าน',pin:'หมุด'};
 
-// prefill saved config
-$('#sbUrl').value = localStorage.getItem(LS.url) || '';
-$('#sbKey').value = localStorage.getItem(LS.key) || '';
-
 $('#loginBtn').addEventListener('click', login);
 $('#password').addEventListener('keydown', e => { if(e.key==='Enter') login(); });
 
 async function login(){
-  const url=$('#sbUrl').value.trim(), key=$('#sbKey').value.trim();
+  const url=window.RF_CONFIG&&RF_CONFIG.url, key=window.RF_CONFIG&&RF_CONFIG.anonKey;
   const email=$('#email').value.trim(), pw=$('#password').value;
   $('#err').textContent='';
-  if(!url||!key){ $('#err').textContent='กรอก Supabase URL และ anon key ก่อน'; return; }
+  if(!url||!key){ $('#err').textContent='config.js ไม่ถูกโหลด'; return; }
   if(!email||!pw){ $('#err').textContent='กรอกอีเมลและรหัสผ่าน'; return; }
   $('#loginBtn').disabled=true; $('#loginBtn').textContent='กำลังเข้าสู่ระบบ...';
   try{
     sb = supabase.createClient(url, key);
     const { error } = await sb.auth.signInWithPassword({ email, password: pw });
     if(error) throw error;
-    localStorage.setItem(LS.url, url); localStorage.setItem(LS.key, key);
     await start();
   }catch(e){
     $('#err').textContent = 'เข้าสู่ระบบไม่สำเร็จ: ' + (e.message||e);

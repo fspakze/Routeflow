@@ -59,8 +59,6 @@
 <div id="app">
   <div id="gate"><div class="box">
     <h1>🏪 จัดการร้านค้า</h1><p>เข้าสู่ระบบ</p>
-    <label class="fl">Supabase URL</label><input id="sbUrl" placeholder="https://xxxx.supabase.co">
-    <label class="fl">anon key</label><input id="sbKey" placeholder="eyJ...">
     <label class="fl">อีเมล</label><input id="email" type="email">
     <label class="fl">รหัสผ่าน</label><input id="password" type="password">
     <button id="loginBtn">เข้าสู่ระบบ</button>
@@ -93,22 +91,22 @@
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
 <script>
 const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
 const LS={url:'rf_sb_url',key:'rf_sb_key'};
 let sb=null,me=null,rows=[],cur=null,pickMap=null,pickMarker=null,cats=[];
 
-$('#sbUrl').value=localStorage.getItem(LS.url)||'';$('#sbKey').value=localStorage.getItem(LS.key)||'';
 $('#loginBtn').onclick=login;$('#password').addEventListener('keydown',e=>{if(e.key==='Enter')login();});
 
 async function login(){
-  const url=$('#sbUrl').value.trim(),key=$('#sbKey').value.trim(),email=$('#email').value.trim(),pw=$('#password').value;
-  $('#gerr').textContent='';if(!url||!key||!email||!pw){$('#gerr').textContent='กรอกให้ครบ';return;}
+  const url=window.RF_CONFIG&&RF_CONFIG.url,key=window.RF_CONFIG&&RF_CONFIG.anonKey,email=$('#email').value.trim(),pw=$('#password').value;
+  $('#gerr').textContent='';if(!url||!key){$('#gerr').textContent='config.js ไม่ถูกโหลด';return;}
+  if(!email||!pw){$('#gerr').textContent='กรอกอีเมล+รหัสผ่าน';return;}
   $('#loginBtn').disabled=true;$('#loginBtn').textContent='กำลังเข้า...';
   try{
     sb=supabase.createClient(url,key);
     const{error}=await sb.auth.signInWithPassword({email,password:pw});if(error)throw error;
-    localStorage.setItem(LS.url,url);localStorage.setItem(LS.key,key);
     const{data:{user}}=await sb.auth.getUser();
     const{data:prof}=await sb.from('profiles').select('full_name,role').eq('id',user.id).maybeSingle();
     me={id:user.id,...(prof||{})};

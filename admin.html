@@ -91,8 +91,6 @@
   <div id="gate"><div class="box">
     <h1>🚚 RouteFlow — จัดการ</h1>
     <p>เข้าสู่ระบบ (ต้องเป็น admin/manager)</p>
-    <label>Supabase URL</label><input id="sbUrl" placeholder="https://xxxx.supabase.co" />
-    <label>anon key</label><input id="sbKey" placeholder="eyJhbGciOi..." />
     <label>อีเมล</label><input id="email" type="email" />
     <label>รหัสผ่าน</label><input id="password" type="password" />
     <button id="loginBtn">เข้าสู่ระบบ</button>
@@ -206,6 +204,7 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
 <script>
 const $=s=>document.querySelector(s), $$=s=>document.querySelectorAll(s);
 const LS={url:'rf_sb_url',key:'rf_sb_key'};
@@ -216,20 +215,19 @@ const STYLE_LS='rf_marker_styles';   // ใช้ร่วมกับ map.html
 const SHAPES=['circle','square','triangle','diamond','star','house','pin'];
 const SHAPE_LABEL={circle:'วงกลม',square:'สี่เหลี่ยม',triangle:'สามเหลี่ยม',diamond:'ข้าวหลามตัด',star:'ดาว',house:'บ้าน',pin:'หมุด'};
 
-$('#sbUrl').value=localStorage.getItem(LS.url)||''; $('#sbKey').value=localStorage.getItem(LS.key)||'';
 $('#loginBtn').onclick=login; $('#password').addEventListener('keydown',e=>{if(e.key==='Enter')login();});
 $('#tDate').value=new Date().toISOString().slice(0,10);
 
 async function login(){
-  const url=$('#sbUrl').value.trim(),key=$('#sbKey').value.trim(),email=$('#email').value.trim(),pw=$('#password').value;
+  const url=window.RF_CONFIG&&RF_CONFIG.url,key=window.RF_CONFIG&&RF_CONFIG.anonKey,email=$('#email').value.trim(),pw=$('#password').value;
   $('#gerr').textContent='';
-  if(!url||!key||!email||!pw){$('#gerr').textContent='กรอกให้ครบ';return;}
+  if(!url||!key){$('#gerr').textContent='config.js ไม่ถูกโหลด';return;}
+  if(!email||!pw){$('#gerr').textContent='กรอกอีเมล+รหัสผ่าน';return;}
   $('#loginBtn').disabled=true;$('#loginBtn').textContent='กำลังเข้า...';
   try{
     sb=supabase.createClient(url,key);
     const{error}=await sb.auth.signInWithPassword({email,password:pw});
     if(error)throw error;
-    localStorage.setItem(LS.url,url);localStorage.setItem(LS.key,key);
     const{data:{user}}=await sb.auth.getUser();
     const{data:prof}=await sb.from('profiles').select('full_name,role').eq('id',user.id).maybeSingle();
     me={id:user.id,...(prof||{})};

@@ -40,14 +40,14 @@
 |---|---|---|
 | `schema.postgres.sql` | ✅ รันแล้ว | ตารางหลัก + RLS |
 | `customers_import.sql` | ✅ รันแล้ว | 401 ร้าน |
-| `customers_profile.sql` | ⬜ **ต้องเช็ค/รัน** | คอลัมน์โปรไฟล์ร้าน + `customer_photos` + `customer_orders` + bucket `store-photos` — ไม่งั้น stores.html error |
-| `driver_phase.sql` | ⬜ **ต้องเช็ค/รัน** | policy ให้คนขับแก้ trip ตัวเอง + bucket `proofs` — ไม่งั้น driver.html เขียนไม่ได้ |
+| `customers_profile.sql` | ✅ รันแล้ว | คอลัมน์โปรไฟล์ร้าน + `customer_photos` + `customer_orders` + bucket `store-photos` |
+| `driver_phase.sql` | ✅ รันแล้ว | policy ให้คนขับแก้ trip ตัวเอง + bucket `proofs` |
 
 ## 5. Edge Functions
 | ฟังก์ชัน | สถานะ | ใช้ทำ |
 |---|---|---|
 | `admin-create-user` | ✅ deploy แล้ว | admin สร้างบัญชีพนักงาน |
-| `admin-delete-user` | ⬜ **ยังไม่ deploy** | ปุ่มลบบัญชี (ปุ่มปิด/แก้สิทธิ์ใช้ได้เลยไม่ต้อง deploy) |
+| `admin-delete-user` | ✅ deploy แล้ว | ปุ่มลบบัญชีพนักงาน |
 
 โค้ดอยู่ที่ `supabase/functions/<ชื่อ>/index.ts` · deploy: Edge Functions → Deploy a new function → Via Editor → วางโค้ด → ตั้งชื่อให้ตรง → Deploy (key ที่จำเป็น Supabase ใส่ให้อัตโนมัติ)
 
@@ -78,11 +78,10 @@ git push
 - **route_plan_points ยังไม่ถูกสร้างตอนวางแผน** — dashboard ใช้ origin+จุดส่งเป็นเส้นแผนแทน (พอใช้ได้ แต่ถ้าอยากเทียบถนนจริงต้องต่อ routing engine เช่น OSRM)
 
 ## 10. งานที่เหลือ (Todo)
-1. รัน `customers_profile.sql` + `driver_phase.sql` (ถ้ายัง)
-2. Deploy `admin-delete-user`
-3. **LINE แจ้งเตือน** — Edge Function `notify-line` (ยังไม่ทำ) ยิงเข้ากลุ่มผู้จัดการเมื่อวิ่งนอกเส้นทาง/จบงาน · ต้องมี LINE Channel access token · dashboard มีปุ่ม "ส่ง LINE" เรียก `notify-line` รออยู่แล้ว
-4. Sync รหัส FS- อีก 389 ร้านกับ Friendship `horeca_customers`
-5. (อนาคต) Realtime GPS สดบนแดชบอร์ด, รายงานสรุป, route_plan_points ตามถนนจริง
+> ✅ SQL migration ครบ (customers_profile + driver_phase) · Edge Functions ครบ (create + delete) — **ระบบหลักพร้อมใช้จริงครบวงจร**
+1. **LINE แจ้งเตือน** — Edge Function `notify-line` (ยังไม่ทำ) ยิงเข้ากลุ่มผู้จัดการเมื่อวิ่งนอกเส้นทาง/จบงาน · ต้องมี LINE Channel access token · dashboard มีปุ่ม "ส่ง LINE" เรียก `notify-line` รออยู่แล้ว
+2. Sync รหัส FS- อีก 389 ร้านกับ Friendship `horeca_customers`
+3. (อนาคต) Realtime GPS สดบนแดชบอร์ด, รายงานสรุป, route_plan_points ตามถนนจริง
 
 ## 11. ไฟล์ในโปรเจกต์
 ```

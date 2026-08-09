@@ -91,7 +91,7 @@ schema.postgres.sql                              ← ตาราง+RLS (รั
 customers_import.sql                             ← 401 ร้าน (รันแล้ว, gitignored)
 customers_profile.sql / driver_phase.sql         ← migration (ตรวจว่ารันหรือยัง)
 supabase/functions/admin-create-user/index.ts    ← deploy แล้ว
-supabase/functions/admin-delete-user/index.ts    ← ยังไม่ deploy
+supabase/functions/admin-delete-user/index.ts    ← deploy แล้ว
 import_customers.mjs / mymaps_full.kml / *.kmz    ← เครื่องมือ import (gitignored)
 SPEC.md / HANDOFF.md                             ← เอกสาร
 ```

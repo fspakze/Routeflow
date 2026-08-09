@@ -98,16 +98,24 @@ async function login(){
   if(!email||!pw){$('#gerr').textContent='กรอกอีเมล+รหัสผ่าน';return;}
   $('#loginBtn').disabled=true;$('#loginBtn').textContent='กำลังเข้า...';
   try{
-    sb=supabase.createClient(url,key);
+    sb=sb||supabase.createClient(url,key);
     const{error}=await sb.auth.signInWithPassword({email,password:pw});if(error)throw error;
-    const{data:{user}}=await sb.auth.getUser();
-    const{data:prof}=await sb.from('profiles').select('full_name,role').eq('id',user.id).maybeSingle();
-    me={id:user.id,...(prof||{})};
-    $('#me').textContent=prof?prof.full_name:'';
-    $('#gate').classList.add('hidden');$('#bar').classList.remove('hidden');$('#main').classList.remove('hidden');
-    await loadTrips();
+    await proceed();
   }catch(e){$('#gerr').textContent='เข้าไม่สำเร็จ: '+(e.message||e);$('#loginBtn').disabled=false;$('#loginBtn').textContent='เข้าสู่ระบบ';}
 }
+async function proceed(){
+  const{data:{user}}=await sb.auth.getUser();
+  const{data:prof}=await sb.from('profiles').select('full_name,role').eq('id',user.id).maybeSingle();
+  me={id:user.id,...(prof||{})};
+  $('#me').textContent=prof?prof.full_name:'';
+  $('#gate').classList.add('hidden');$('#bar').classList.remove('hidden');$('#main').classList.remove('hidden');
+  await loadTrips();
+}
+(async function boot(){
+  if(!(window.RF_CONFIG&&window.supabase))return;
+  sb=sb||supabase.createClient(RF_CONFIG.url,RF_CONFIG.anonKey);
+  try{const{data:{session}}=await sb.auth.getSession();if(session)await proceed();}catch(e){}
+})();
 
 async function loadTrips(){
   const today=new Date().toISOString().slice(0,10);

@@ -105,19 +105,27 @@ async function login(){
   if(!email||!pw){$('#gerr').textContent='กรอกอีเมล+รหัสผ่าน';return;}
   $('#loginBtn').disabled=true;$('#loginBtn').textContent='กำลังเข้า...';
   try{
-    sb=supabase.createClient(url,key);
+    sb=sb||supabase.createClient(url,key);
     const{error}=await sb.auth.signInWithPassword({email,password:pw});if(error)throw error;
-    const{data:{user}}=await sb.auth.getUser();
-    const{data:prof}=await sb.from('profiles').select('full_name,role').eq('id',user.id).maybeSingle();
-    me={id:user.id,...(prof||{})};
-    $('#me').textContent=prof?`${prof.full_name} · ${prof.role}`:'(ยังไม่มี profile)';
-    $('#gate').style.display='none';$('#bar').style.display='flex';$('#wrap').style.display='grid';
-    await loadList();
-    const pid=new URLSearchParams(location.search).get('id');
-    if(pid) await openStore(+pid);
+    await proceed();
   }catch(e){$('#gerr').textContent='เข้าไม่สำเร็จ: '+(e.message||e);$('#loginBtn').disabled=false;$('#loginBtn').textContent='เข้าสู่ระบบ';}
 }
+async function proceed(){
+  const{data:{user}}=await sb.auth.getUser();
+  const{data:prof}=await sb.from('profiles').select('full_name,role').eq('id',user.id).maybeSingle();
+  me={id:user.id,...(prof||{})};
+  $('#me').textContent=prof?`${prof.full_name} · ${prof.role}`:'(ยังไม่มี profile)';
+  $('#gate').style.display='none';$('#bar').style.display='flex';$('#wrap').style.display='grid';
+  await loadList();
+  const pid=new URLSearchParams(location.search).get('id');
+  if(pid) await openStore(+pid);
+}
 $('#logoutBtn').onclick=async()=>{await sb.auth.signOut();location.reload();};
+(async function boot(){
+  if(!(window.RF_CONFIG&&window.supabase))return;
+  sb=sb||supabase.createClient(RF_CONFIG.url,RF_CONFIG.anonKey);
+  try{const{data:{session}}=await sb.auth.getSession();if(session)await proceed();}catch(e){}
+})();
 
 async function loadList(){
   const{data,error}=await sb.from('customers').select('id,name,code,category,phone,address,verified').order('name').limit(5000);

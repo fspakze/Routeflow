@@ -188,12 +188,12 @@
       </div>
       <div class="card"><h3>ทีมงานทั้งหมด</h3><div id="crewTable"></div></div>
       <div class="card">
-        <h3>⚠️ ต้อง deploy Edge Function ก่อนใช้ปุ่มนี้ (ครั้งเดียว)</h3>
+        <h3>⚠️ Edge Functions ที่ต้อง deploy (ครั้งเดียว)</h3>
         <div class="hint" style="font-size:12px;line-height:1.7">
-          การสร้างบัญชีต้องผ่านฟังก์ชันฝั่งเซิร์ฟเวอร์ (เพื่อความปลอดภัย) — deploy ครั้งเดียว:<br>
-          <b>วิธีง่าย:</b> Supabase → <b>Edge Functions → Deploy a new function</b> → ชื่อ <code>admin-create-user</code> → วางโค้ดจากไฟล์ <code>supabase/functions/admin-create-user/index.ts</code> → Deploy<br>
-          (Supabase ใส่ key ที่จำเป็นให้อัตโนมัติ ไม่ต้องตั้งเอง)<br>
-          ถ้ายังไม่ deploy จะขึ้น error ตอนกดสร้าง — ระหว่างนั้นยังสร้าง user มือใน Supabase ได้เหมือนเดิม
+          การสร้าง/ลบบัญชีต้องผ่านฟังก์ชันฝั่งเซิร์ฟเวอร์ (ปลอดภัย) — Supabase → <b>Edge Functions → Deploy a new function</b> แล้ว deploy 2 ตัว:<br>
+          • <code>admin-create-user</code> ← โค้ดจาก <code>supabase/functions/admin-create-user/index.ts</code> (สร้างบัญชี)<br>
+          • <code>admin-delete-user</code> ← โค้ดจาก <code>supabase/functions/admin-delete-user/index.ts</code> (ลบบัญชี)<br>
+          (Supabase ใส่ key ที่จำเป็นให้อัตโนมัติ) · แก้สิทธิ์/ปิดใช้งาน/แก้ชื่อ ทำได้เลยไม่ต้อง deploy
         </div>
       </div>
     </div>
@@ -225,21 +225,27 @@ async function login(){
   if(!email||!pw){$('#gerr').textContent='กรอกอีเมล+รหัสผ่าน';return;}
   $('#loginBtn').disabled=true;$('#loginBtn').textContent='กำลังเข้า...';
   try{
-    sb=supabase.createClient(url,key);
+    sb=sb||supabase.createClient(url,key);
     const{error}=await sb.auth.signInWithPassword({email,password:pw});
     if(error)throw error;
-    const{data:{user}}=await sb.auth.getUser();
-    const{data:prof}=await sb.from('profiles').select('full_name,role').eq('id',user.id).maybeSingle();
-    me={id:user.id,...(prof||{})};
-    if(!prof){ $('#gerr').textContent='login สำเร็จ แต่ยังไม่มี profile — รัน SQL bootstrap สร้าง admin ก่อน';
-               $('#loginBtn').disabled=false;$('#loginBtn').textContent='เข้าสู่ระบบ'; return; }
-    $('#me').textContent=`${prof.full_name} · ${prof.role}`;
-    $('#gate').style.display='none';['#bar','#tabs','#main'].forEach(s=>$(s).style.display='');
-    $('#bar').style.display='flex';$('#tabs').style.display='flex';
-    await loadAll();
+    if(!await proceed()){$('#loginBtn').disabled=false;$('#loginBtn').textContent='เข้าสู่ระบบ';}
   }catch(e){$('#gerr').textContent='เข้าไม่สำเร็จ: '+(e.message||e);$('#loginBtn').disabled=false;$('#loginBtn').textContent='เข้าสู่ระบบ';}
 }
+async function proceed(){
+  const{data:{user}}=await sb.auth.getUser();
+  const{data:prof}=await sb.from('profiles').select('full_name,role').eq('id',user.id).maybeSingle();
+  me={id:user.id,...(prof||{})};
+  if(!prof){ $('#gerr').textContent='login สำเร็จ แต่ยังไม่มี profile — รัน SQL bootstrap สร้าง admin ก่อน'; return false; }
+  $('#me').textContent=`${prof.full_name} · ${prof.role}`;
+  $('#gate').style.display='none';$('#bar').style.display='flex';$('#tabs').style.display='flex';$('#main').style.display='';
+  await loadAll(); return true;
+}
 $('#logoutBtn').onclick=async()=>{await sb.auth.signOut();location.reload();};
+(async function boot(){
+  if(!(window.RF_CONFIG&&window.supabase))return;
+  sb=sb||supabase.createClient(RF_CONFIG.url,RF_CONFIG.anonKey);
+  try{const{data:{session}}=await sb.auth.getSession();if(session)await proceed();}catch(e){}
+})();
 
 // tabs
 $$('.tabs button').forEach(b=>b.onclick=()=>{
@@ -252,7 +258,7 @@ async function loadAll(){
   const[cRes,vRes,pRes]=await Promise.all([
     sb.from('customers').select('id,name,code,category,lat,lng').not('lat','is',null).limit(5000),
     sb.from('vehicles').select('*').order('plate_no'),
-    sb.from('profiles').select('id,full_name,role,phone').eq('is_active',true).order('role')
+    sb.from('profiles').select('id,full_name,role,phone,is_active').order('role')
   ]);
   customers=cRes.data||[]; vehicles=vRes.data||[]; crew=pRes.data||[];
   renderVehSelect(); renderCrewPick(); renderVehTable(); renderCrewTable(); buildPlanMap();
@@ -265,7 +271,7 @@ function renderVehSelect(){
     : '<option value="">— ยังไม่มีรถ (เพิ่มที่แท็บ รถ) —</option>';
 }
 function renderCrewPick(){
-  const pickable=crew.filter(c=>c.role==='driver'||c.role==='helper');
+  const pickable=crew.filter(c=>(c.role==='driver'||c.role==='helper')&&c.is_active!==false);
   $('#crewPick').innerHTML = pickable.length
     ? pickable.map(c=>`<label style="flex:none;display:flex;gap:6px;align-items:center;font-size:13px;border:1px solid var(--line);padding:6px 10px;border-radius:8px;cursor:pointer">
         <input type="checkbox" style="width:auto" value="${c.id}" data-role="${c.role}"> ${esc(c.full_name)} <span class="pill">${c.role}</span></label>`).join('')
@@ -480,11 +486,49 @@ $('#addUser').onclick=async()=>{
   }
   $('#addUser').disabled=false;$('#addUser').textContent='+ สร้างบัญชี';
 };
+const ROLES=['admin','manager','driver','helper','viewer'];
 function renderCrewTable(){
   const el=$('#crewTable');
   if(!crew.length){el.innerHTML='<div class="muted">ยังไม่มีทีมงาน — เพิ่มด้านบน</div>';return;}
-  el.innerHTML=`<table><tr><th>ชื่อ</th><th>บทบาท</th><th>เบอร์</th></tr>
-  ${crew.map(c=>`<tr><td>${esc(c.full_name)}</td><td><span class="pill">${c.role}</span></td><td>${esc(c.phone||'-')}</td></tr>`).join('')}</table>`;
+  el.innerHTML=`<table><tr><th>ชื่อ</th><th>บทบาท (สิทธิ์)</th><th>เบอร์</th><th>สถานะ</th><th>จัดการ</th></tr>
+  ${crew.map(c=>{const off=c.is_active===false;const self=c.id===me.id;
+    return `<tr style="${off?'opacity:.5':''}">
+    <td><b>${esc(c.full_name)}</b>${self?' <span class="pill">คุณ</span>':''}</td>
+    <td><select data-role="${c.id}" ${self?'disabled title="แก้สิทธิ์ตัวเองไม่ได้"':''}>${ROLES.map(r=>`<option ${c.role===r?'selected':''}>${r}</option>`).join('')}</select></td>
+    <td>${esc(c.phone||'-')}</td>
+    <td>${off?'<span style="color:var(--bad)">ปิด</span>':'<span class="ok">เปิด</span>'}</td>
+    <td style="white-space:nowrap">
+      <button class="btn ghost sm" data-edit="${c.id}">แก้ไข</button>
+      <button class="btn ghost sm" data-toggle="${c.id}">${off?'เปิด':'ปิด'}</button>
+      ${self?'':`<button class="btn ghost sm" data-del="${c.id}" style="color:var(--bad)">ลบ</button>`}
+    </td></tr>`;}).join('')}</table>
+  <div class="hint">• เปลี่ยน dropdown = เปลี่ยนสิทธิ์ทันที • "ปิด" = พักงาน (ไม่ให้ login/มอบงาน) • "ลบ" = ลบบัญชีถาวร</div>`;
+  el.querySelectorAll('[data-role]').forEach(s=>s.onchange=async()=>{
+    const{error}=await sb.from('profiles').update({role:s.value}).eq('id',s.dataset.role);
+    if(error)toast('เปลี่ยนสิทธิ์ไม่ได้: '+error.message); else{toast('เปลี่ยนสิทธิ์แล้ว');await loadAll();}
+  });
+  el.querySelectorAll('[data-edit]').forEach(b=>b.onclick=async()=>{
+    const c=crew.find(x=>x.id===b.dataset.edit);
+    const name=prompt('ชื่อ:',c.full_name); if(name===null)return;
+    const phone=prompt('เบอร์โทร:',c.phone||''); if(phone===null)return;
+    const{error}=await sb.from('profiles').update({full_name:name.trim()||c.full_name,phone:phone.trim()||null}).eq('id',c.id);
+    if(error)toast('แก้ไขไม่ได้: '+error.message); else{toast('แก้ไขแล้ว');await loadAll();}
+  });
+  el.querySelectorAll('[data-toggle]').forEach(b=>b.onclick=async()=>{
+    const c=crew.find(x=>x.id===b.dataset.toggle);
+    const{error}=await sb.from('profiles').update({is_active:!(c.is_active!==false)}).eq('id',c.id);
+    if(error)toast('เปลี่ยนสถานะไม่ได้: '+error.message); else{toast('อัปเดตแล้ว');await loadAll();}
+  });
+  el.querySelectorAll('[data-del]').forEach(b=>b.onclick=async()=>{
+    const c=crew.find(x=>x.id===b.dataset.del);
+    if(!confirm('ลบบัญชี "'+c.full_name+'" ถาวร? (ลบไม่ได้ถ้าถูกใช้ใน trip — ให้ใช้ "ปิด" แทน)'))return;
+    try{
+      const{data,error}=await sb.functions.invoke('admin-delete-user',{body:{id:c.id}});
+      if(error){let m=error.message;try{const j=await error.context.json();if(j&&j.error)m=j.error;}catch(e){}throw new Error(m);}
+      if(!data||data.ok!==true)throw new Error((data&&data.error)||'ลบไม่สำเร็จ (ยังไม่ได้ deploy admin-delete-user?)');
+      toast('ลบบัญชีแล้ว');await loadAll();
+    }catch(e){toast('ลบไม่ได้: '+(e.message||e)+' — หรือใช้ปุ่ม "ปิด" แทน');}
+  });
 }
 /* ---------- utils ---------- */
 function esc(s){return(s==null?'':String(s)).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}

@@ -137,7 +137,7 @@ async function login(){
   if(!email||!pw){ $('#err').textContent='กรอกอีเมลและรหัสผ่าน'; return; }
   $('#loginBtn').disabled=true; $('#loginBtn').textContent='กำลังเข้าสู่ระบบ...';
   try{
-    sb = supabase.createClient(url, key);
+    sb = sb || supabase.createClient(url, key);
     const { error } = await sb.auth.signInWithPassword({ email, password: pw });
     if(error) throw error;
     await start();
@@ -339,6 +339,13 @@ function fitMain(){
 }
 
 async function logout(){ try{ await sb.auth.signOut(); }catch(e){} location.reload(); }
+
+// จำ session ข้ามหน้า — ถ้า login ไว้แล้วไม่ต้องกรอกใหม่
+(async function boot(){
+  if(!(window.RF_CONFIG&&window.supabase))return;
+  sb=sb||supabase.createClient(RF_CONFIG.url,RF_CONFIG.anonKey);
+  try{const{data:{session}}=await sb.auth.getSession();if(session)await start();}catch(e){}
+})();
 
 function escapeHtml(s){ return (s==null?'':String(s)).replace(/[&<>"']/g,
   m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }

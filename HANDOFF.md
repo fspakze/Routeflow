@@ -50,6 +50,7 @@
 |---|---|---|
 | `admin-create-user` | ✅ deploy แล้ว | admin สร้างบัญชีพนักงาน |
 | `admin-delete-user` | ✅ deploy แล้ว | ปุ่มลบบัญชีพนักงาน |
+| `admin-set-password` | ⏳ ต้อง deploy | admin ตั้ง/รีเซ็ตรหัสผ่านพนักงาน (ปุ่ม "🔑 รหัส") |
 
 โค้ดอยู่ที่ `supabase/functions/<ชื่อ>/index.ts` · deploy: Edge Functions → Deploy a new function → Via Editor → วางโค้ด → ตั้งชื่อให้ตรง → Deploy (key ที่จำเป็น Supabase ใส่ให้อัตโนมัติ)
 

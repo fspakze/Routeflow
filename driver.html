@@ -103,8 +103,14 @@ async function login(){
     sb=sb||supabase.createClient(url,key);
     const{error}=await sb.auth.signInWithPassword({email,password:pw});if(error)throw error;
     await proceed();
-  }catch(e){$('#gerr').textContent='เข้าไม่สำเร็จ: '+(e.message||e);$('#loginBtn').disabled=false;$('#loginBtn').textContent='เข้าสู่ระบบ';}
+  }catch(e){$('#gerr').textContent='เข้าไม่สำเร็จ: '+loginErr(e);}
+  finally{$('#loginBtn').disabled=false;$('#loginBtn').textContent='เข้าสู่ระบบ';}
 }
+function loginErr(e){const m=(e&&e.message)||String(e);
+  if(/Invalid login credentials/i.test(m))return 'ไอดีหรือรหัสผ่านไม่ถูกต้อง';
+  if(/Email not confirmed/i.test(m))return 'บัญชียังไม่ถูกยืนยัน';
+  if(/Failed to fetch|NetworkError/i.test(m))return 'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ — เช็กอินเทอร์เน็ต';
+  return m;}
 async function proceed(){
   const{data:{user}}=await sb.auth.getUser();
   const{data:prof}=await sb.from('profiles').select('full_name,role').eq('id',user.id).maybeSingle();

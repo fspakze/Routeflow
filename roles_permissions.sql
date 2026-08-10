@@ -1,16 +1,22 @@
 -- RouteFlow — เพิ่มตำแหน่ง "หัวหน้า DC" + ระบบกำหนดสิทธิ์รายตำแหน่ง (แก้ได้เฉพาะ Admin)
--- รันครั้งเดียวใน Supabase → SQL Editor (รันทั้งไฟล์ได้เลย)
+--
+-- ⚠️ สำคัญ: ต้องรัน "แยก 2 สเต็ป" เพราะ Postgres ไม่ยอมให้เพิ่มค่า enum แล้วใช้ทันทีในทรานแซกชันเดียว
+--   STEP 1: เลือกเฉพาะบรรทัด ALTER TYPE ด้านล่าง แล้วกด Run (commit ค่า enum ก่อน)
+--   STEP 2: รันส่วน STEP 2 ทั้งหมด
 
--- 1) เพิ่มตำแหน่งใหม่เข้า enum (admin มีอยู่แล้ว) — ปลอดภัย ไม่กระทบข้อมูลเดิม
+-- ========== STEP 1 (รันบรรทัดนี้ก่อน ตัวเดียว) ==========
 alter type public.user_role add value if not exists 'dc_head';
 
--- 2) ให้ "หัวหน้า DC" มีสิทธิ์เขียนระดับผู้จัดการใน RLS (ตัวคุมความปลอดภัยชั้นฐานข้อมูล)
+
+-- ========== STEP 2 (รันหลังจาก STEP 1 สำเร็จแล้ว) ==========
+
+-- 2.1) ให้ "หัวหน้า DC" มีสิทธิ์เขียนระดับผู้จัดการใน RLS
 create or replace function public.is_manager()
 returns boolean language sql stable security definer set search_path = public as $$
   select coalesce((select role in ('admin','manager','dc_head') from public.profiles where id = auth.uid()), false)
 $$;
 
--- 3) ตารางเมทริกซ์สิทธิ์รายตำแหน่ง (ใช้ text เพื่อเลี่ยงผูกกับ enum โดยตรง)
+-- 2.2) ตารางเมทริกซ์สิทธิ์รายตำแหน่ง (ใช้ text เพื่อเลี่ยงผูกกับ enum โดยตรง)
 create table if not exists public.role_permissions (
   role          text primary key,
   label         text,
@@ -24,7 +30,7 @@ create table if not exists public.role_permissions (
   updated_at    timestamptz not null default now()
 );
 
--- 4) ค่าเริ่มต้นของแต่ละตำแหน่ง (ไม่ทับของเดิมถ้ามีแล้ว)
+-- 2.3) ค่าเริ่มต้นของแต่ละตำแหน่ง (ไม่ทับของเดิมถ้ามีแล้ว)
 insert into public.role_permissions (role,label,can_dashboard,can_plan,can_stores,can_vehicles,can_reports,can_staff,can_driver_app) values
   ('admin',  'ผู้ดูแลระบบ',   true, true, true, true, true, true, true ),
   ('manager','ผู้จัดการ',     true, true, true, true, true, true, false),
@@ -34,7 +40,7 @@ insert into public.role_permissions (role,label,can_dashboard,can_plan,can_store
   ('viewer', 'ดูอย่างเดียว',  true, false,false,false,true, false,false)
 on conflict (role) do nothing;
 
--- 5) RLS: ทุกคนที่ล็อกอินอ่านได้ (เพื่อให้ UI รู้ว่าตำแหน่งตัวเองทำอะไรได้) · แก้ได้เฉพาะ Admin
+-- 2.4) RLS: ทุกคนที่ล็อกอินอ่านได้ (เพื่อให้ UI รู้สิทธิ์ตัวเอง) · แก้ได้เฉพาะ Admin
 alter table public.role_permissions enable row level security;
 
 drop policy if exists rp_read on public.role_permissions;

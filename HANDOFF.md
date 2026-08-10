@@ -44,13 +44,14 @@
 | `driver_phase.sql` | ✅ รันแล้ว | policy ให้คนขับแก้ trip ตัวเอง + bucket `proofs` |
 | `username_login.sql` | ✅ รันแล้ว | คอลัมน์ `profiles.username` (login ด้วยไอดีแทนอีเมล) |
 | `roles_permissions.sql` | ✅ รันแล้ว | เพิ่ม role `dc_head` + ตาราง `role_permissions` (เมทริกซ์สิทธิ์ แก้ได้เฉพาะ admin) · **รันแยก 2 สเต็ป** (STEP 1 = ALTER TYPE, STEP 2 = ที่เหลือ) |
+| `depots.sql` | ⏳ ต้องรัน | ตาราง `depots` คลังต้นทาง (เลือกได้ตอนวางแผน) + seed 2 คลัง |
 
 ## 5. Edge Functions
 | ฟังก์ชัน | สถานะ | ใช้ทำ |
 |---|---|---|
 | `admin-create-user` | ✅ deploy แล้ว | admin สร้างบัญชีพนักงาน |
 | `admin-delete-user` | ✅ deploy แล้ว | ปุ่มลบบัญชีพนักงาน |
-| `admin-set-password` | ⏳ ต้อง deploy | admin ตั้ง/รีเซ็ตรหัสผ่านพนักงาน (ปุ่ม "🔑 รหัส") |
+| `admin-set-password` | ✅ deploy แล้ว | admin ตั้ง/รีเซ็ตรหัสผ่านพนักงาน (ปุ่ม "🔑 รหัส") |
 
 โค้ดอยู่ที่ `supabase/functions/<ชื่อ>/index.ts` · deploy: Edge Functions → Deploy a new function → Via Editor → วางโค้ด → ตั้งชื่อให้ตรง → Deploy (key ที่จำเป็น Supabase ใส่ให้อัตโนมัติ)
 

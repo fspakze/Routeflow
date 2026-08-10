@@ -123,10 +123,14 @@
           <div class="field"><label class="fl">รถ</label><select id="tVeh"></select></div>
         </div>
         <div class="row" style="margin-top:10px">
-          <div class="field"><label class="fl">คลังต้นทาง (ชื่อ)</label><input id="tOrigin" value="คลัง Friendship SuperMart"></div>
+          <div class="field"><label class="fl">คลังต้นทาง</label><select id="tDepot"></select></div>
+          <div class="field"><label class="fl">ชื่อคลัง</label><input id="tOrigin" value="คลัง Friendship SuperMart"></div>
           <div class="field"><label class="fl">พิกัดต้นทาง (lat,lng)</label><input id="tOriginLL" placeholder="15.11,105.80"></div>
         </div>
         <div style="margin-top:10px"><label class="fl">ทีมงาน (เลือกอย่างน้อย 1 คนขับ)</label><div id="crewPick" class="row"></div></div>
+        <details style="margin-top:10px"><summary style="cursor:pointer;font-weight:600;color:var(--brand)">🏭 จัดการคลังต้นทาง (เพิ่ม/แก้พิกัด)</summary>
+          <div id="depotMgr" style="margin-top:10px"></div>
+        </details>
       </div>
 
       <div class="card">
@@ -219,7 +223,7 @@
 <script>
 const $=s=>document.querySelector(s), $$=s=>document.querySelectorAll(s);
 const LS={url:'rf_sb_url',key:'rf_sb_key'};
-let sb=null, me=null, customers=[], vehicles=[], crew=[], selected=[], planMap=null, cluster=null, markerById={};
+let sb=null, me=null, customers=[], vehicles=[], crew=[], depots=[], selected=[], planMap=null, cluster=null, markerById={};
 const PALETTE=['#0f9d58','#0288d1','#f57c00','#9c27b0','#d81b60','#00897b','#5e35b1','#c62828','#3949ab','#6d4c41','#00acc1','#7cb342','#8d6e63','#e53935','#1e88e5','#fb8c00'];
 let colorOf={}, styleOf={}, hiddenCat=new Set(), _pcats=[];
 const STYLE_LS='rf_marker_styles';   // ใช้ร่วมกับ map.html
@@ -270,15 +274,75 @@ $$('.tabs button').forEach(b=>b.onclick=()=>{
 });
 
 async function loadAll(){
-  const[cRes,vRes,pRes,rpRes]=await Promise.all([
+  const[cRes,vRes,pRes,rpRes,dRes]=await Promise.all([
     sb.from('customers').select('id,name,code,category,lat,lng').not('lat','is',null).limit(5000),
     sb.from('vehicles').select('*').order('plate_no'),
     sb.from('profiles').select('id,full_name,role,phone,is_active,username').order('role'),
-    sb.from('role_permissions').select('*')
+    sb.from('role_permissions').select('*'),
+    sb.from('depots').select('*').order('name')
   ]);
-  customers=cRes.data||[]; vehicles=vRes.data||[]; crew=pRes.data||[];
+  customers=cRes.data||[]; vehicles=vRes.data||[]; crew=pRes.data||[]; depots=dRes.data||[];
   perms={}; (rpRes.data||[]).forEach(r=>perms[r.role]=r); myPerm=perms[me.role]||{};
-  renderVehSelect(); renderCrewPick(); renderVehTable(); renderCrewTable(); renderPerms(); applyTabGating(); buildPlanMap();
+  renderVehSelect(); renderCrewPick(); renderVehTable(); renderCrewTable(); renderPerms(); applyTabGating();
+  renderDepotSelect(); renderDepotMgr(); buildPlanMap();
+}
+/* ---------- DEPOTS (คลังต้นทาง) ---------- */
+function renderDepotSelect(){
+  const sel=$('#tDepot'); if(!sel)return;
+  const act=depots.filter(d=>d.is_active!==false);
+  sel.innerHTML=act.map(d=>`<option value="${d.id}">${esc(d.name)}${d.lat==null?' (ยังไม่ตั้งพิกัด)':''}</option>`).join('')+'<option value="custom">📍 กำหนดเอง</option>';
+  applyDepot();
+  sel.onchange=applyDepot;
+}
+function applyDepot(){
+  const sel=$('#tDepot'); if(!sel)return;
+  const v=sel.value;
+  if(v==='custom'){$('#tOrigin').readOnly=false;$('#tOriginLL').readOnly=false;return;}
+  const d=depots.find(x=>String(x.id)===String(v));
+  if(!d)return;
+  $('#tOrigin').value=d.name;
+  $('#tOriginLL').value=(d.lat!=null&&d.lng!=null)?d.lat+','+d.lng:'';
+  $('#tOrigin').readOnly=true;$('#tOriginLL').readOnly=false; // พิกัดยังพิมพ์แทรกได้ถ้าคลังยังไม่ตั้ง
+}
+function renderDepotMgr(){
+  const el=$('#depotMgr'); if(!el)return;
+  if(!depots.length){el.innerHTML='<div class="hint">ยังไม่มีตาราง depots — รัน <code>depots.sql</code> ใน Supabase ก่อน แล้วรีเฟรช</div>';return;}
+  el.innerHTML=depots.map(d=>`<div class="row" style="align-items:flex-end;margin-bottom:8px" data-depot="${d.id}">
+      <div class="field"><label class="fl">ชื่อคลัง</label><input class="d-name" value="${esc(d.name)}"></div>
+      <div class="field" style="max-width:130px"><label class="fl">lat</label><input class="d-lat" value="${d.lat??''}"></div>
+      <div class="field" style="max-width:130px"><label class="fl">lng</label><input class="d-lng" value="${d.lng??''}"></div>
+      <button class="btn ghost sm d-gps" title="ใช้ตำแหน่งปัจจุบัน">📍 GPS</button>
+      <button class="btn sm d-save">บันทึก</button>
+      <button class="btn ghost sm d-del" style="color:var(--bad)">ลบ</button>
+    </div>`).join('')+
+    `<div class="row" style="align-items:flex-end;border-top:1px dashed var(--line);padding-top:10px">
+      <div class="field"><label class="fl">เพิ่มคลังใหม่ (ชื่อ)</label><input id="dNew" placeholder="เช่น Friendship Trading"></div>
+      <button class="btn sm" id="dAdd">+ เพิ่มคลัง</button></div>
+    <div class="hint">พิกัด: พิมพ์ lat,lng เอง หรือกด "📍 GPS" ตอนอยู่ที่คลัง (คัดลอกพิกัดจากหน้าแผนที่ร้านก็ได้)</div>`;
+  el.querySelectorAll('[data-depot]').forEach(row=>{
+    const id=row.dataset.depot;
+    row.querySelector('.d-gps').onclick=()=>{
+      if(!navigator.geolocation){toast('อุปกรณ์ไม่รองรับ GPS');return;}
+      navigator.geolocation.getCurrentPosition(p=>{row.querySelector('.d-lat').value=p.coords.latitude.toFixed(6);row.querySelector('.d-lng').value=p.coords.longitude.toFixed(6);toast('ใส่พิกัดปัจจุบันแล้ว กด บันทึก');},()=>toast('อ่านตำแหน่งไม่ได้'));
+    };
+    row.querySelector('.d-save').onclick=async()=>{
+      const name=row.querySelector('.d-name').value.trim();
+      const lat=parseFloat(row.querySelector('.d-lat').value),lng=parseFloat(row.querySelector('.d-lng').value);
+      if(!name){toast('ใส่ชื่อคลัง');return;}
+      const{error}=await sb.from('depots').update({name,lat:isNaN(lat)?null:lat,lng:isNaN(lng)?null:lng}).eq('id',id);
+      if(error)toast('บันทึกไม่ได้: '+error.message);else{toast('บันทึกคลังแล้ว');await loadAll();}
+    };
+    row.querySelector('.d-del').onclick=async()=>{
+      if(!confirm('ลบคลังนี้?'))return;
+      const{error}=await sb.from('depots').delete().eq('id',id);
+      if(error)toast('ลบไม่ได้: '+error.message);else{toast('ลบแล้ว');await loadAll();}
+    };
+  });
+  $('#dAdd').onclick=async()=>{
+    const name=$('#dNew').value.trim(); if(!name){toast('ใส่ชื่อคลัง');return;}
+    const{error}=await sb.from('depots').insert({name});
+    if(error)toast('เพิ่มไม่ได้: '+error.message);else{toast('เพิ่มคลังแล้ว');await loadAll();}
+  };
 }
 /* ---------- PERMISSIONS ---------- */
 function applyTabGating(){

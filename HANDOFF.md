@@ -23,9 +23,9 @@
 | ไฟล์ | หน้าที่ | สิทธิ์ |
 |---|---|---|
 | `index.html` | หน้าหลัก รวมลิงก์ | ทุกคน |
-| `dashboard.html` | trip สด · แผน vs จริง · นอกเส้นทาง · timeline · PDF | admin/manager |
-| `driver.html` | PWA คนขับ: ออกเดินทาง/GPS/เช็คอิน/ถ่ายรูปส่ง/จบงาน | crew ของ trip |
-| `admin.html` | วางแผน trip · จัดการรถ · **จัดการพนักงาน (สร้าง/แก้/สิทธิ์/ปิด-เปิด/ลบ)** | admin/manager |
+| `dashboard.html` | trip สด (**ติดตามรถ realtime ทุก 15 วิ**) · แผน vs จริง(ถนนจริง) · นอกเส้นทาง · timeline · PDF · รายงาน | admin/manager |
+| `driver.html` | PWA คนขับ: ออกเดินทาง/GPS/เช็คอิน/**POD (รูป+ผู้รับ+ลายเซ็น+ส่งครบ/บางส่วน/ตีกลับ)**/จบงาน | crew ของ trip |
+| `admin.html` | วางแผน trip (**+จัดลำดับอัตโนมัติ OSRM**) · จัดการรถ/คลัง · จัดการพนักงาน · สิทธิ์ | admin/manager |
 | `stores.html` | จัดการร้าน: เพิ่ม/แก้ · ปักพิกัด · รูป · ประวัติซื้อ | login |
 | `map.html` | แผนที่ร้าน 401 จุด · ปรับสี/ขนาด/รูปทรงหมุด · ค้นหา(ชื่อ/รหัส/เบอร์) | login |
 | `config.js` | Supabase URL + publishable key (ฝังได้ ปลอดภัย — RLS กันข้อมูล) | — |
@@ -45,6 +45,7 @@
 | `username_login.sql` | ✅ รันแล้ว | คอลัมน์ `profiles.username` (login ด้วยไอดีแทนอีเมล) |
 | `roles_permissions.sql` | ✅ รันแล้ว | เพิ่ม role `dc_head` + ตาราง `role_permissions` (เมทริกซ์สิทธิ์ แก้ได้เฉพาะ admin) · **รันแยก 2 สเต็ป** (STEP 1 = ALTER TYPE, STEP 2 = ที่เหลือ) |
 | `depots.sql` | ⏳ ต้องรัน | ตาราง `depots` คลังต้นทาง (เลือกได้ตอนวางแผน) + seed 2 คลัง |
+| `pod.sql` | ⏳ ต้องรัน | คอลัมน์หลักฐานส่ง (received_by/signature/result/reason) ใน `delivery_proofs` |
 
 ## 5. Edge Functions
 | ฟังก์ชัน | สถานะ | ใช้ทำ |

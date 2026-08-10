@@ -81,6 +81,21 @@
   </main>
   <div class="toast" id="toast"></div>
 
+  <!-- Return depot modal -->
+  <div id="retModal" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:4000;display:flex;align-items:center;justify-content:center;padding:16px">
+    <div style="background:#fff;width:100%;max-width:420px;border-radius:16px;padding:18px">
+      <h3 style="margin:0 0 6px">🏭 กลับเข้าคลัง</h3>
+      <p class="muted" style="margin:0 0 12px;font-size:13px">ส่งของครบแล้ว เลือกคลังที่จะกลับเข้า — ระบบจะตาม GPS ต่อจนถึงคลัง</p>
+      <label class="fl">เลือกคลัง</label>
+      <select id="retDepot"></select>
+      <div style="display:flex;gap:8px;margin-top:14px">
+        <button class="btn ok" id="retStart" style="flex:1">🚚 เริ่มกลับคลัง</button>
+        <button class="btn gray" id="retSkip">จบเลย (ไม่กลับคลัง)</button>
+      </div>
+      <div style="text-align:center;margin-top:8px"><button class="btn gray sm" id="retCancel">ยกเลิก</button></div>
+    </div>
+  </div>
+
   <!-- POD modal: หลักฐานการส่ง -->
   <div id="podModal" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:4000;display:flex;align-items:flex-end;justify-content:center">
     <div style="background:#fff;width:100%;max-width:480px;border-radius:16px 16px 0 0;padding:16px;max-height:94vh;overflow:auto">
@@ -185,6 +200,7 @@ async function openTrip(id){
 function renderTrip(){
   const done=stops.filter(s=>s.status==='delivered').length;
   const isLive=trip.status==='live', isDone=trip.status==='done';
+  const returning=isLive&&trip.return_name&&!trip.returned_at;
   $('#tripView').innerHTML=`
     <button class="btn gray sm" id="backBtn" style="margin-bottom:10px">← กลับ</button>
     <div class="card">
@@ -193,13 +209,16 @@ function renderTrip(){
       <div class="muted" style="margin-top:4px">🚚 ${esc(trip.vehicles?trip.vehicles.plate_no:'-')} · ส่งแล้ว <b>${done}/${stops.length}</b> ร้าน
         ${trip.actual_depart?' · ออกจริง '+fmtTime(trip.actual_depart):''}</div>
       ${!isLive&&!isDone?`<button class="btn" id="departBtn" style="margin-top:12px">🚚 ออกเดินทาง (เริ่มส่ง GPS)</button>`:''}
-      ${isLive?`<button class="btn ok" id="finishBtn" style="margin-top:12px">🏁 จบงาน (ส่งครบแล้ว)</button>`:''}
+      ${isLive&&!returning?`<button class="btn ok" id="finishBtn" style="margin-top:12px">🏁 จบส่ง — เลือกคลังกลับ</button>`:''}
+      ${returning?`<div class="muted" style="margin-top:10px">🚚 กำลังกลับคลัง: <b>${esc(trip.return_name)}</b></div>
+        <button class="btn ok" id="arriveDepotBtn" style="margin-top:8px">✅ ถึงคลังแล้ว (จบทริป)</button>`:''}
     </div>
     <div id="tripMap"></div>
     <div id="stopsWrap">${isDone?renderSummary():stops.map(renderStop).join('')}</div>`;
   $('#backBtn').onclick=()=>{ if(trip.status!=='live'||confirm('กำลังส่ง GPS อยู่ ออกจากหน้านี้จะหยุดติดตาม ยืนยัน?')){stopTracking();$('#tripView').classList.add('hidden');$('#listView').classList.remove('hidden');loadTrips();} };
   if($('#departBtn'))$('#departBtn').onclick=depart;
-  if($('#finishBtn'))$('#finishBtn').onclick=finish;
+  if($('#finishBtn'))$('#finishBtn').onclick=openReturnPicker;
+  if($('#arriveDepotBtn'))$('#arriveDepotBtn').onclick=arriveDepot;
   bindStops();
   setTimeout(initTripMap,60);
 }
@@ -387,13 +406,34 @@ function updateStopUI(){
   const done=stops.filter(s=>s.status==='delivered').length;
   initTripMap();
 }
-async function finish(){
-  if(!confirm('จบงานนี้? ระบบจะหยุดติดตาม GPS'))return;
-  const done=stops.filter(s=>s.status==='delivered').length;
-  const{error}=await sb.from('trips').update({actual_finish:new Date().toISOString(),status:'done',stops_done:done}).eq('id',trip.id);
+/* ---------- กลับเข้าคลัง + จบทริป ---------- */
+let driverDepots=[];
+async function openReturnPicker(){
+  if(!driverDepots.length){const{data}=await sb.from('depots').select('*').eq('is_active',true).order('name');driverDepots=data||[];}
+  const sel=$('#retDepot');
+  sel.innerHTML=driverDepots.length?driverDepots.map(d=>`<option value="${d.id}">${esc(d.name)}${d.lat==null?' (ยังไม่ตั้งพิกัด)':''}</option>`).join(''):'<option value="">— ยังไม่มีคลัง —</option>';
+  $('#retModal').classList.remove('hidden');
+}
+$('#retCancel').onclick=()=>$('#retModal').classList.add('hidden');
+$('#retSkip').onclick=()=>{$('#retModal').classList.add('hidden');endTrip(false);};
+$('#retStart').onclick=async()=>{
+  const d=driverDepots.find(x=>String(x.id)===String($('#retDepot').value));
+  if(!d){toast('เลือกคลัง');return;}
+  const{error}=await sb.from('trips').update({return_name:d.name,return_lat:d.lat,return_lng:d.lng}).eq('id',trip.id);
+  if(error){toast('บันทึกไม่ได้: '+error.message);return;}
+  trip.return_name=d.name;trip.return_lat=d.lat;trip.return_lng=d.lng;
+  $('#retModal').classList.add('hidden');
+  toast('🚚 เริ่มกลับคลัง '+d.name+' — ยังตาม GPS อยู่'); renderTrip();
+};
+async function arriveDepot(){ endTrip(true); }
+async function endTrip(returned){
+  if(!confirm(returned?'ยืนยันถึงคลังแล้ว? จบทริปและหยุด GPS':'จบทริปเลย? (ไม่กลับคลัง) หยุด GPS'))return;
+  const done=stops.filter(s=>s.status==='delivered').length; const now=new Date().toISOString();
+  const upd={actual_finish:now,status:'done',stops_done:done}; if(returned)upd.returned_at=now;
+  const{error}=await sb.from('trips').update(upd).eq('id',trip.id);
   if(error){toast('จบงานไม่สำเร็จ: '+error.message);return;}
-  trip.status='done';trip.actual_finish=new Date().toISOString();trip.stops_done=done;
-  stopTracking(); toast('🏁 จบงานแล้ว — ส่ง '+done+'/'+stops.length+' ร้าน'); renderTrip();
+  Object.assign(trip,upd);
+  stopTracking(); toast('🏁 จบทริปแล้ว — ส่ง '+done+'/'+stops.length+' ร้าน'); renderTrip();
 }
 
 /* ---------- utils ---------- */

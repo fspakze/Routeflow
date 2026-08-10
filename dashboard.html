@@ -206,7 +206,7 @@ const SET_KEY='rf_settings';
 function loadSettings(){try{return JSON.parse(localStorage.getItem(SET_KEY))||{};}catch(e){return{};}}
 let SETTINGS=loadSettings();
 let OFF_M=SETTINGS.offM||200, OFF_MIN=SETTINGS.offMin||2;   // เกณฑ์นอกเส้นทาง (ปรับได้ในหน้าตั้งค่า)
-let sb=null,me=null,trips=[],stopsByTrip={},filter='all',map=null,layers=[],histMode=false,liveLayers=[],liveTimer=null;
+let sb=null,me=null,trips=[],stopsByTrip={},filter='all',map=null,layers=[],histMode=false,liveLayers=[],liveTimer=null,FLAGS={};
 const LETTERS='ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 const LCOL=['#ea580c','#dc2626','#2563eb','#f59e0b','#0f9d58','#9333ea','#0891b2','#db2777'];
 
@@ -233,8 +233,9 @@ async function proceed(){
   if(!prof||!['admin','manager'].includes(prof.role)){$('#gerr').textContent='ต้องเป็น admin/manager เท่านั้น';return false;}
   $('#gate').style.display='none';$('#app').style.display='grid';
   $('#dateSub').textContent=new Date().toLocaleDateString('th-TH',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
-  initMap(); await loadTrips(); return true;
+  initMap(); await loadFlags(); await loadTrips(); return true;
 }
+async function loadFlags(){try{const{data}=await sb.from('app_settings').select('*');FLAGS={};(data||[]).forEach(r=>FLAGS[r.key]=r.enabled);}catch(e){FLAGS={};}}
 (async function boot(){
   if(!(window.RF_CONFIG&&window.supabase))return;
   sb=sb||supabase.createClient(RF_CONFIG.url,RF_CONFIG.anonKey);
@@ -396,7 +397,9 @@ async function openDetail(id){
     </div>`;
   $('#backBtn').onclick=()=>{showOverview();};
   $('#lineBtn').onclick=()=>notifyLine(t,s,off);
-  renderTimeline(t,ss,off);
+  let proofs={};
+  if(FLAGS.pod_details){const{data:pf}=await sb.from('delivery_proofs').select('*').in('trip_stop_id',ss.map(x=>x.id));(pf||[]).forEach(p=>{proofs[p.trip_stop_id]=p;});}
+  renderTimeline(t,ss,off,proofs);
   setTimeout(()=>drawDetailMap(t,ss,pings||[],off,planRoad),60);
 }
 async function loadCrew(id){
@@ -404,16 +407,27 @@ async function loadCrew(id){
   if(!data||!data.length)return '-';
   return data.map(c=>(c.profiles?c.profiles.full_name:'?')+(c.crew_role==='driver'?' (ขับ)':'')).join(', ');
 }
-function renderTimeline(t,ss,off){
+function renderTimeline(t,ss,off,proofs){
+  proofs=proofs||{};
   let html=`<div class="tlitem"><span class="dot"></span><div class="tt">ออกจากคลัง${t.origin_name?' · '+esc(t.origin_name):''}</div><div class="tm">${t.actual_depart?fmtTime(t.actual_depart):(t.planned_depart?'แผน '+fmtTime(t.planned_depart):'-')}</div></div>`;
   ss.forEach(s=>{const c=s.customers||{};const cls=s.status==='delivered'?'done':(s.status==='skipped'||s.status==='failed')?'skip':'';
     const dwell=s.dwell_min!=null?' · จอด '+s.dwell_min+' นาที':'';
+    const pf=proofs[s.id]; let pod='';
+    if(pf){const badge=pf.result==='returned'?'<span class="st alert">ตีกลับ</span>':pf.result==='partial'?'<span class="st delayed">ส่งบางส่วน</span>':pf.result==='delivered'?'<span class="st done">ส่งครบ</span>':'';
+      pod=`<div class="tm">${badge}${pf.received_by?' · ผู้รับ: '+esc(pf.received_by):''}${pf.reason?' · '+esc(pf.reason):''}`
+        +(pf.signature?`<br><img src="${pf.signature}" alt="ลายเซ็น" style="height:42px;border:1px solid var(--line);border-radius:6px;background:#fff;margin-top:4px">`:'')
+        +(pf.file_path?` <button class="btn ghost sm" onclick="viewProof('${String(pf.file_path).replace(/'/g,'')}')">📷 ดูรูป</button>`:'')+`</div>`;}
     html+=`<div class="tlitem ${cls}"><span class="dot"></span>
-      <div class="tt">${s.seq}. ${esc(c.name||'-')} ${s.status==='delivered'?'✅':s.status==='skipped'?'⤼':''}</div>
-      <div class="tm">${s.actual_arrive?'ถึง '+fmtTime(s.actual_arrive):'ยังไม่ถึง'}${s.actual_depart?' → ออก '+fmtTime(s.actual_depart):''}${dwell}${s.note?' · '+esc(s.note):''}</div></div>`;});
+      <div class="tt">${s.seq}. ${esc(c.name||'-')} ${s.status==='delivered'?'✅':s.status==='skipped'?'⤼':s.status==='failed'?'↩️':''}</div>
+      <div class="tm">${s.actual_arrive?'ถึง '+fmtTime(s.actual_arrive):'ยังไม่ถึง'}${s.actual_depart?' → ออก '+fmtTime(s.actual_depart):''}${dwell}${s.note?' · '+esc(s.note):''}</div>${pod}</div>`;});
   off.events.forEach(e=>{html+=`<div class="tlitem off"><span class="dot"></span><div class="tt" style="color:var(--bad)">⚠️ วิ่งนอกเส้นทาง</div><div class="tm">${fmtTime(e.start)}–${fmtTime(e.end)} · ห่าง ${e.maxDist} ม. · ${e.min} นาที</div></div>`;});
-  if(t.actual_finish)html+=`<div class="tlitem done"><span class="dot"></span><div class="tt">จบงาน</div><div class="tm">${fmtTime(t.actual_finish)}</div></div>`;
+  if(t.actual_finish)html+=`<div class="tlitem done"><span class="dot"></span><div class="tt">จบส่ง</div><div class="tm">${fmtTime(t.actual_finish)}</div></div>`;
+  if(t.return_name)html+=`<div class="tlitem done"><span class="dot"></span><div class="tt">🏭 กลับเข้าคลัง · ${esc(t.return_name)}</div><div class="tm">${t.returned_at?'ถึงคลัง '+fmtTime(t.returned_at):'กำลังกลับ'}</div></div>`;
   $('#timeline').innerHTML=html;
+}
+async function viewProof(path){
+  try{const{data,error}=await sb.storage.from('proofs').createSignedUrl(path,300);if(error||!data)throw error;window.open(data.signedUrl,'_blank');}
+  catch(e){toast('เปิดรูปไม่ได้');}
 }
 function drawDetailMap(t,ss,pings,off,planRoad){
   const dm=L.map('dmap').setView([15.11,105.82],12);
@@ -621,6 +635,11 @@ function renderSettings(){
             2. คัดลอก Channel access token<br>
             3. deploy Edge Function <code>notify-line</code> + ตั้ง token เป็น secret</div>
         </div>
+        <div class="panel"><h3>🧩 ฟีเจอร์ระบบ (เปิด/ปิด)</h3>
+          <div class="setrow"><span>แสดงผู้รับ/ลายเซ็น/ตีกลับ ในรายละเอียดทริป</span><input type="checkbox" id="flag_pod_details" style="width:auto"></div>
+          <div class="setrow"><span>ออร์เดอร์/บิล + เก็บเงินปลายทาง (COD)</span><input type="checkbox" id="flag_orders_cod" style="width:auto"></div>
+          <div class="muted" style="font-size:12px;margin-top:8px" id="flagNote"></div>
+        </div>
         <div class="panel"><h3>🔗 ทางลัด</h3>
           <div style="display:flex;flex-direction:column;gap:8px">
             <a class="btn ghost sm" href="admin.html">🗺️ วางแผนเส้นทาง / รถ / พนักงาน</a>
@@ -637,6 +656,20 @@ function renderSettings(){
     toast('บันทึกเกณฑ์แล้ว: '+m+' ม. / '+mn+' นาที');
   };
   checkLine();
+  wireFlags();
+}
+function wireFlags(){
+  const isAdmin=(me&&me.role==='admin');
+  [['flag_pod_details','pod_details'],['flag_orders_cod','orders_cod']].forEach(([elId,key])=>{
+    const cb=$('#'+elId); if(!cb)return;
+    cb.checked=!!FLAGS[key]; cb.disabled=!isAdmin;
+    cb.onchange=async()=>{
+      const{error}=await sb.from('app_settings').update({enabled:cb.checked,updated_at:new Date().toISOString()}).eq('key',key);
+      if(error){toast('บันทึกไม่ได้: '+error.message);cb.checked=!cb.checked;return;}
+      FLAGS[key]=cb.checked; toast('อัปเดตฟีเจอร์แล้ว');
+    };
+  });
+  $('#flagNote').textContent=isAdmin?'ติ๊ก = เปิดใช้ทันที (มีผลกับทุกเครื่องหลังรีเฟรช)':'⚠️ เฉพาะ Admin เปิด/ปิดได้';
 }
 async function checkLine(){
   const el=$('#lineStat');if(!el)return;

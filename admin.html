@@ -114,6 +114,11 @@
   <main id="main" style="display:none">
     <!-- PLAN -->
     <div class="pane active" id="pane-plan">
+      <div class="card" style="display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap">
+        <div class="field" style="flex:1;min-width:240px"><label class="fl">เลือกงาน</label>
+          <select id="tripPick"><option value="new">➕ สร้าง trip ใหม่</option></select></div>
+        <div id="editBadge" class="muted" style="font-size:13px;padding-bottom:9px"></div>
+      </div>
       <div class="card">
         <h3>1. ข้อมูล trip</h3>
         <div class="row">
@@ -223,7 +228,7 @@
 <script>
 const $=s=>document.querySelector(s), $$=s=>document.querySelectorAll(s);
 const LS={url:'rf_sb_url',key:'rf_sb_key'};
-let sb=null, me=null, customers=[], vehicles=[], crew=[], depots=[], selected=[], planMap=null, cluster=null, markerById={};
+let sb=null, me=null, customers=[], vehicles=[], crew=[], depots=[], allTrips=[], editTripId=null, selected=[], planMap=null, cluster=null, markerById={};
 const PALETTE=['#0f9d58','#0288d1','#f57c00','#9c27b0','#d81b60','#00897b','#5e35b1','#c62828','#3949ab','#6d4c41','#00acc1','#7cb342','#8d6e63','#e53935','#1e88e5','#fb8c00'];
 let colorOf={}, styleOf={}, hiddenCat=new Set(), _pcats=[];
 const STYLE_LS='rf_marker_styles';   // ใช้ร่วมกับ map.html
@@ -274,17 +279,58 @@ $$('.tabs button').forEach(b=>b.onclick=()=>{
 });
 
 async function loadAll(){
-  const[cRes,vRes,pRes,rpRes,dRes]=await Promise.all([
+  const today=new Date().toISOString().slice(0,10);
+  const[cRes,vRes,pRes,rpRes,dRes,tRes]=await Promise.all([
     sb.from('customers').select('id,name,code,category,lat,lng').not('lat','is',null).limit(5000),
     sb.from('vehicles').select('*').order('plate_no'),
     sb.from('profiles').select('id,full_name,role,phone,is_active,username').order('role'),
     sb.from('role_permissions').select('*'),
-    sb.from('depots').select('*').order('name')
+    sb.from('depots').select('*').order('name'),
+    sb.from('trips').select('*').gte('trip_date',today).order('trip_date').order('planned_depart')
   ]);
-  customers=cRes.data||[]; vehicles=vRes.data||[]; crew=pRes.data||[]; depots=dRes.data||[];
+  customers=cRes.data||[]; vehicles=vRes.data||[]; crew=pRes.data||[]; depots=dRes.data||[]; allTrips=tRes.data||[];
   perms={}; (rpRes.data||[]).forEach(r=>perms[r.role]=r); myPerm=perms[me.role]||{};
   renderVehSelect(); renderCrewPick(); renderVehTable(); renderCrewTable(); renderPerms(); applyTabGating();
-  renderDepotSelect(); renderDepotMgr(); buildPlanMap();
+  renderDepotSelect(); renderDepotMgr(); renderTripPick(); buildPlanMap();
+}
+/* ---------- แก้ไข trip ที่มีอยู่ ---------- */
+function renderTripPick(){
+  const sel=$('#tripPick'); if(!sel)return;
+  const editable=allTrips.filter(t=>t.status==='planned');
+  sel.innerHTML='<option value="new">➕ สร้าง trip ใหม่</option>'+
+    editable.map(t=>`<option value="${t.id}">✏️ ${esc(t.trip_code)} · ${t.trip_date}</option>`).join('');
+  sel.value=editTripId?String(editTripId):'new';
+  sel.onchange=()=>{ if(sel.value==='new')newTrip(); else loadTripForEdit(+sel.value); };
+}
+async function loadTripForEdit(id){
+  const t=allTrips.find(x=>x.id===id); if(!t)return;
+  editTripId=id;
+  $('#tDate').value=t.trip_date||'';
+  $('#tTime').value=t.planned_depart?new Date(t.planned_depart).toTimeString().slice(0,5):'';
+  $('#tCode').value=t.trip_code||'';
+  if(t.vehicle_id)$('#tVeh').value=String(t.vehicle_id);
+  if($('#tDepot')){$('#tDepot').value='custom';applyDepot();}
+  $('#tOrigin').value=t.origin_name||''; $('#tOrigin').readOnly=false;
+  $('#tOriginLL').value=(t.origin_lat!=null&&t.origin_lng!=null)?t.origin_lat+','+t.origin_lng:'';
+  // ทีมงาน
+  const{data:tc}=await sb.from('trip_crew').select('user_id,crew_role').eq('trip_id',id);
+  const crewIds=new Set((tc||[]).map(c=>c.user_id));
+  $$('#crewPick input').forEach(i=>{i.checked=crewIds.has(i.value);});
+  // จุดส่ง (เส้นทาง)
+  const{data:ts}=await sb.from('trip_stops').select('seq, customers(id,name,code,lat,lng,category)').eq('trip_id',id).order('seq');
+  selected=(ts||[]).map(s=>s.customers).filter(Boolean);
+  renderStops();
+  $('#saveTrip').textContent='💾 บันทึกการแก้ไข';
+  $('#editBadge').innerHTML='กำลังแก้ไข: <b>'+esc(t.trip_code)+'</b> — เปลี่ยนรถ/เส้นทาง/คนขับได้';
+  toast('โหลด '+t.trip_code+' มาแก้ไข');
+}
+function newTrip(){
+  editTripId=null; selected=[]; renderStops();
+  $('#tCode').value=''; $('#tDate').value=new Date().toISOString().slice(0,10); $('#tTime').value='08:00';
+  $$('#crewPick input').forEach(i=>i.checked=false);
+  renderDepotSelect();
+  $('#saveTrip').textContent='💾 บันทึก trip'; $('#editBadge').textContent='';
+  updatePlanSummary();
 }
 /* ---------- DEPOTS (คลังต้นทาง) ---------- */
 function renderDepotSelect(){
@@ -528,22 +574,29 @@ async function saveTrip(){
   const ll=$('#tOriginLL').value.trim();
   if(ll){const p=ll.split(',');originLat=parseFloat(p[0]);originLng=parseFloat(p[1]);}
   const departISO=$('#tTime').value?new Date(`${date}T${$('#tTime').value}:00`).toISOString():null;
+  const fields={trip_code:code,trip_date:date,vehicle_id:+vehId,
+    origin_name:$('#tOrigin').value.trim()||null,origin_lat:originLat,origin_lng:originLng,
+    planned_depart:departISO,planned_stops:selected.length};
   $('#saveTrip').disabled=true;$('#saveTrip').textContent='กำลังบันทึก...';
   try{
-    const{data:trip,error:e1}=await sb.from('trips').insert({
-      trip_code:code,trip_date:date,vehicle_id:+vehId,
-      origin_name:$('#tOrigin').value.trim()||null,origin_lat:originLat,origin_lng:originLng,
-      planned_depart:departISO,planned_stops:selected.length,status:'planned',created_by:me.id
-    }).select('id').single();
-    if(e1)throw e1;
-    const{error:e2}=await sb.from('trip_crew').insert(crewSel.map(c=>({trip_id:trip.id,user_id:c.id,crew_role:c.role})));
+    let tripId=editTripId;
+    if(editTripId){
+      // แก้ไข: อัปเดตข้อมูล + แทนที่ทีมงาน + จุดส่ง
+      const{error:e1}=await sb.from('trips').update(fields).eq('id',editTripId); if(e1)throw e1;
+      const{error:ed1}=await sb.from('trip_crew').delete().eq('trip_id',editTripId); if(ed1)throw ed1;
+      const{error:ed2}=await sb.from('trip_stops').delete().eq('trip_id',editTripId); if(ed2)throw ed2;
+    }else{
+      const{data:trip,error:e1}=await sb.from('trips').insert({...fields,status:'planned',created_by:me.id}).select('id').single();
+      if(e1)throw e1; tripId=trip.id;
+    }
+    const{error:e2}=await sb.from('trip_crew').insert(crewSel.map(c=>({trip_id:tripId,user_id:c.id,crew_role:c.role})));
     if(e2)throw e2;
-    const{error:e3}=await sb.from('trip_stops').insert(selected.map((s,i)=>({trip_id:trip.id,customer_id:s.id,seq:i+1})));
+    const{error:e3}=await sb.from('trip_stops').insert(selected.map((s,i)=>({trip_id:tripId,customer_id:s.id,seq:i+1})));
     if(e3)throw e3;
-    toast('✅ บันทึก trip '+code+' แล้ว ('+selected.length+' ร้าน)');
-    selected=[];renderStops();$('#tCode').value='';
+    toast((editTripId?'✅ บันทึกการแก้ไข ':'✅ บันทึก trip ')+code+' ('+selected.length+' ร้าน)');
+    newTrip(); await loadAll();
   }catch(e){$('#perr').textContent='บันทึกไม่สำเร็จ: '+(e.message||e);}
-  $('#saveTrip').disabled=false;$('#saveTrip').textContent='💾 บันทึก trip';
+  $('#saveTrip').disabled=false;$('#saveTrip').textContent=editTripId?'💾 บันทึกการแก้ไข':'💾 บันทึก trip';
 }
 
 /* ---------- VEHICLES ---------- */

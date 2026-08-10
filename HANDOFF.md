@@ -42,8 +42,8 @@
 | `customers_import.sql` | ✅ รันแล้ว | 401 ร้าน |
 | `customers_profile.sql` | ✅ รันแล้ว | คอลัมน์โปรไฟล์ร้าน + `customer_photos` + `customer_orders` + bucket `store-photos` |
 | `driver_phase.sql` | ✅ รันแล้ว | policy ให้คนขับแก้ trip ตัวเอง + bucket `proofs` |
-| `username_login.sql` | ⏳ ต้องรัน | คอลัมน์ `profiles.username` (login ด้วยไอดีแทนอีเมล) |
-| `roles_permissions.sql` | ⏳ ต้องรัน | เพิ่ม role `dc_head` + ตาราง `role_permissions` (เมทริกซ์สิทธิ์ แก้ได้เฉพาะ admin) |
+| `username_login.sql` | ✅ รันแล้ว | คอลัมน์ `profiles.username` (login ด้วยไอดีแทนอีเมล) |
+| `roles_permissions.sql` | ✅ รันแล้ว | เพิ่ม role `dc_head` + ตาราง `role_permissions` (เมทริกซ์สิทธิ์ แก้ได้เฉพาะ admin) · **รันแยก 2 สเต็ป** (STEP 1 = ALTER TYPE, STEP 2 = ที่เหลือ) |
 
 ## 5. Edge Functions
 | ฟังก์ชัน | สถานะ | ใช้ทำ |
@@ -94,7 +94,7 @@ config.js                                        ← Supabase config
 schema.postgres.sql                              ← ตาราง+RLS (รันแล้ว)
 customers_import.sql                             ← 401 ร้าน (รันแล้ว, gitignored)
 customers_profile.sql / driver_phase.sql         ← migration (รันแล้ว)
-username_login.sql / roles_permissions.sql        ← migration ใหม่ (⏳ ต้องรัน)
+username_login.sql / roles_permissions.sql        ← migration (รันแล้ว)
 supabase/functions/admin-create-user/index.ts    ← deploy แล้ว
 supabase/functions/admin-delete-user/index.ts    ← deploy แล้ว
 import_customers.mjs / mymaps_full.kml / *.kmz    ← เครื่องมือ import (gitignored)

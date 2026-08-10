@@ -98,6 +98,14 @@
   .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#111827;color:#fff;padding:11px 20px;border-radius:11px;font-size:14px;z-index:3000;opacity:0;transition:.3s;pointer-events:none}
   .toast.show{opacity:1}
   .muted{color:var(--muted)}
+  /* report tables + settings */
+  .rtbl{width:100%;border-collapse:collapse;font-size:13px}
+  .rtbl th,.rtbl td{padding:8px 10px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+  .rtbl th{color:var(--muted);font-weight:600;font-size:12px;position:sticky;top:0;background:#fff}
+  .rtbl tbody tr:hover{background:var(--bg)}
+  .setrow{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--line);font-size:14px}
+  .setrow span{color:var(--muted)}
+  code{background:var(--bg);padding:1px 5px;border-radius:5px;font-size:12px}
   @media(max-width:1050px){.kpis{grid-template-columns:repeat(2,1fr)}.grid2{grid-template-columns:1fr}#map{height:360px}.metrics{grid-template-columns:repeat(2,1fr)}}
   @media(max-width:720px){#app{grid-template-columns:1fr}aside{position:static;height:auto}}
   @media print{aside,.topbar .search,.topbar .iconbtn,.filters,#backBtn{display:none!important}#app{grid-template-columns:1fr}}
@@ -177,6 +185,10 @@
 
       <!-- trip detail -->
       <div id="detailView"></div>
+      <!-- report / off-route / settings -->
+      <div id="reportView" style="display:none"></div>
+      <div id="offView" style="display:none"></div>
+      <div id="settingsView" style="display:none"></div>
     </main>
   </div>
   <div class="toast" id="toast"></div>
@@ -187,7 +199,10 @@
 <script>
 const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
 const LS={url:'rf_sb_url',key:'rf_sb_key'};
-const OFF_M=200, OFF_MIN=2;           // เกณฑ์นอกเส้นทาง: 200 ม. นาน 2 นาที
+const SET_KEY='rf_settings';
+function loadSettings(){try{return JSON.parse(localStorage.getItem(SET_KEY))||{};}catch(e){return{};}}
+let SETTINGS=loadSettings();
+let OFF_M=SETTINGS.offM||200, OFF_MIN=SETTINGS.offMin||2;   // เกณฑ์นอกเส้นทาง (ปรับได้ในหน้าตั้งค่า)
 let sb=null,me=null,trips=[],stopsByTrip={},filter='all',map=null,layers=[],histMode=false;
 const LETTERS='ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 const LCOL=['#ea580c','#dc2626','#2563eb','#f59e0b','#0f9d58','#9333ea','#0891b2','#db2777'];
@@ -209,7 +224,7 @@ async function login(){
 async function proceed(){
   const{data:{user}}=await sb.auth.getUser();
   const{data:prof}=await sb.from('profiles').select('full_name,role').eq('id',user.id).maybeSingle();
-  me={id:user.id,...(prof||{})};
+  me={id:user.id,email:user.email,...(prof||{})};
   if(!prof||!['admin','manager'].includes(prof.role)){$('#gerr').textContent='ต้องเป็น admin/manager เท่านั้น';return false;}
   $('#gate').style.display='none';$('#app').style.display='grid';
   $('#dateSub').textContent=new Date().toLocaleDateString('th-TH',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
@@ -222,17 +237,20 @@ async function proceed(){
 })();
 
 // nav
+function hideAllViews(){['overView','detailView','reportView','offView','settingsView'].forEach(id=>{const el=$('#'+id);if(el)el.style.display='none';});}
 $$('.nav a[data-view]').forEach(a=>a.onclick=()=>{
   $$('.nav a').forEach(x=>x.classList.remove('active'));a.classList.add('active');
   const v=a.dataset.view;
-  histMode=(v==='history');
-  showOverview();
-  if(v==='offroute')filter='alert',syncFilterBtns();
-  else if(v==='dash'||v==='today')filter='all',syncFilterBtns();
-  loadTrips();
+  hideAllViews();
+  if(v==='report'){$('#reportView').style.display='block';renderReport();return;}
+  if(v==='offroute'){$('#offView').style.display='block';renderOffReport();return;}
+  if(v==='settings'){$('#settingsView').style.display='block';renderSettings();return;}
+  // dash / today / history → overview
+  histMode=(v==='history');filter='all';syncFilterBtns();
+  $('#overView').style.display='';loadTrips();
 });
 function syncFilterBtns(){$$('#filters button').forEach(b=>b.classList.toggle('on',b.dataset.f===filter));}
-function showOverview(){$('#overView').style.display='';$('#detailView').style.display='none';}
+function showOverview(){hideAllViews();$('#overView').style.display='';}
 
 async function loadTrips(){
   const today=new Date().toISOString().slice(0,10);
@@ -433,6 +451,159 @@ async function notifyLine(t,s,off){
 
 $('#notifBtn').onclick=()=>{filter='alert';syncFilterBtns();renderTripList();drawMap();toast('กรองเฉพาะ trip ที่มีปัญหา');};
 $('#saveBtn').onclick=()=>toast('บันทึกมุมมองแล้ว (ค่า filter/วันที่)');
+
+/* ================= รายงานสรุป ================= */
+let reportRange='today';
+function renderReport(){
+  $('#reportView').innerHTML=`
+    <div class="topbar"><div><h1>📊 รายงานสรุป</h1><div class="sub">สรุปผลการวิ่งส่งของตามช่วงเวลา</div></div>
+      <div style="flex:1"></div><button class="btn ghost sm" onclick="window.print()">🖨️ ดาวน์โหลด PDF</button></div>
+    <div class="filters" id="rrange">
+      <button data-r="today">วันนี้</button><button data-r="7">7 วัน</button><button data-r="30">30 วัน</button>
+      <span style="display:inline-flex;gap:6px;align-items:center;margin-left:8px">
+        <input type="date" id="rFrom" style="width:auto"><span class="muted">ถึง</span>
+        <input type="date" id="rTo" style="width:auto"><button class="btn sm" id="rGo">ดู</button></span>
+    </div>
+    <div id="reportBody"></div>`;
+  $$('#rrange button[data-r]').forEach(b=>b.onclick=()=>{reportRange=b.dataset.r;markRange();buildReport();});
+  $('#rGo').onclick=()=>{reportRange='custom';markRange();buildReport();};
+  markRange();buildReport();
+}
+function markRange(){$$('#rrange button[data-r]').forEach(b=>b.classList.toggle('on',b.dataset.r===reportRange));}
+function rangeDates(){
+  const today=new Date().toISOString().slice(0,10);
+  if(reportRange==='custom')return{from:$('#rFrom').value||today,to:$('#rTo').value||today};
+  if(reportRange==='today')return{from:today,to:today};
+  const d=new Date();d.setDate(d.getDate()-(+reportRange-1));
+  return{from:d.toISOString().slice(0,10),to:today};
+}
+async function buildReport(){
+  const{from,to}=rangeDates();const body=$('#reportBody');
+  body.innerHTML='<div class="muted" style="padding:30px;text-align:center">กำลังโหลด...</div>';
+  const{data:tr,error}=await sb.from('trips').select('*, vehicles(plate_no,brand_model)').gte('trip_date',from).lte('trip_date',to).order('trip_date',{ascending:false});
+  if(error){body.innerHTML='<div class="alertbar">โหลดไม่ได้: '+esc(error.message)+'</div>';return;}
+  const list=tr||[];const ids=list.map(t=>t.id);let sbt={};
+  if(ids.length){const{data:sd}=await sb.from('trip_stops').select('trip_id,status').in('trip_id',ids);(sd||[]).forEach(s=>{(sbt[s.trip_id]=sbt[s.trip_id]||[]).push(s);});}
+  let done=0,total=0,off=0,offTrips=0,durSum=0,durN=0;
+  const rows=list.map(t=>{
+    const ss=sbt[t.id]||[];const d=ss.filter(s=>s.status==='delivered').length;const tot=ss.length||t.planned_stops||0;
+    done+=d;total+=tot;const oc=t.off_route_count||0;off+=oc;if(oc)offTrips++;
+    const dur=(t.actual_depart&&t.actual_finish)?Math.round((new Date(t.actual_finish)-new Date(t.actual_depart))/60000):null;
+    if(dur!=null){durSum+=dur;durN++;}return{t,d,tot,oc,dur};
+  });
+  const pct=total?Math.round(done/total*1000)/10:0,avgDur=durN?Math.round(durSum/durN):null;
+  body.innerHTML=`
+    <div class="kpis" style="margin-top:14px">
+      <div class="kpi k1"><div class="ic">🛣️</div><div class="big">${list.length}</div><div class="lbl">เที่ยววิ่งทั้งหมด</div></div>
+      <div class="kpi k2"><div class="ic">✓</div><div class="big">${pct}%</div><div class="lbl">ส่งสำเร็จ ${done}/${total} ร้าน</div></div>
+      <div class="kpi k3"><div class="ic">⚠️</div><div class="big">${off}</div><div class="lbl">นอกเส้นทาง (${offTrips} เที่ยว)</div></div>
+      <div class="kpi k4"><div class="ic">⏱️</div><div class="big">${avgDur!=null?avgDur:'-'}</div><div class="lbl">เวลาเฉลี่ย/เที่ยว (นาที)</div></div>
+    </div>
+    <div class="panel"><h3>รายละเอียดรายเที่ยว (${from} → ${to})</h3><div style="overflow:auto;max-height:520px">
+      <table class="rtbl"><thead><tr><th>วันที่</th><th>รหัส</th><th>ทะเบียน</th><th>สถานะ</th><th>ส่งสำเร็จ</th><th>ออก</th><th>จบ</th><th>ใช้เวลา</th><th>นอกเส้นทาง</th></tr></thead>
+      <tbody>${rows.length?rows.map(r=>`<tr>
+        <td>${r.t.trip_date}</td><td>${esc(r.t.trip_code)}</td><td>${esc(r.t.vehicles?r.t.vehicles.plate_no:'-')}</td>
+        <td><span class="st ${r.t.status}">${statusTh(r.t.status)}</span></td><td>${r.d}/${r.tot}</td>
+        <td>${r.t.actual_depart?fmtTime(r.t.actual_depart):'-'}</td><td>${r.t.actual_finish?fmtTime(r.t.actual_finish):'-'}</td>
+        <td>${r.dur!=null?r.dur+' น.':'-'}</td><td>${r.oc?'<b style="color:var(--bad)">'+r.oc+'</b>':'0'}</td>
+      </tr>`).join(''):'<tr><td colspan="9" class="muted" style="text-align:center;padding:20px">ไม่มีข้อมูลในช่วงนี้</td></tr>'}</tbody></table>
+    </div></div>`;
+}
+
+/* ================= รายงานนอกเส้นทาง ================= */
+let offRange='7';
+function renderOffReport(){
+  $('#offView').innerHTML=`
+    <div class="topbar"><div><h1>⚠️ รายงานวิ่งนอกเส้นทาง</h1><div class="sub">เกิน ${OFF_M} ม. จากเส้นแผน ต่อเนื่อง ≥ ${OFF_MIN} นาที (วิเคราะห์จาก GPS จริง)</div></div>
+      <div style="flex:1"></div><button class="btn ghost sm" onclick="window.print()">🖨️ PDF</button></div>
+    <div class="filters" id="orange"><button data-r="today">วันนี้</button><button data-r="7">7 วัน</button><button data-r="30">30 วัน</button></div>
+    <div id="offBody"></div>`;
+  $$('#orange button').forEach(b=>b.onclick=()=>{offRange=b.dataset.r;$$('#orange button').forEach(x=>x.classList.toggle('on',x.dataset.r===offRange));buildOffReport();});
+  $$('#orange button').forEach(x=>x.classList.toggle('on',x.dataset.r===offRange));
+  buildOffReport();
+}
+async function buildOffReport(){
+  const body=$('#offBody');body.innerHTML='<div class="muted" style="padding:30px;text-align:center">กำลังวิเคราะห์เส้นทางจาก GPS...</div>';
+  const today=new Date().toISOString().slice(0,10);let from=today;
+  if(offRange!=='today'){const d=new Date();d.setDate(d.getDate()-(+offRange-1));from=d.toISOString().slice(0,10);}
+  const{data:tr}=await sb.from('trips').select('*, vehicles(plate_no)').gte('trip_date',from).lte('trip_date',today).order('trip_date',{ascending:false});
+  const list=(tr||[]).slice(0,80);const ids=list.map(t=>t.id);let sbt={};
+  if(ids.length){const{data:sd}=await sb.from('trip_stops').select('*, customers(name,lat,lng)').in('trip_id',ids).order('seq');(sd||[]).forEach(s=>{(sbt[s.trip_id]=sbt[s.trip_id]||[]).push(s);});}
+  const allEvents=[];
+  for(const t of list){
+    const{data:pings}=await sb.from('gps_pings').select('lat,lng,recorded_at').eq('trip_id',t.id).order('recorded_at');
+    detectOffRoute(t,sbt[t.id]||[],pings||[]).events.forEach(e=>allEvents.push({t,e}));
+  }
+  allEvents.sort((a,b)=>new Date(b.e.start)-new Date(a.e.start));
+  const totalMin=allEvents.reduce((s,x)=>s+x.e.min,0);
+  const maxD=allEvents.reduce((m,x)=>Math.max(m,x.e.maxDist),0);
+  body.innerHTML=`
+    <div class="kpis" style="margin-top:14px">
+      <div class="kpi k3"><div class="ic">⚠️</div><div class="big">${allEvents.length}</div><div class="lbl">เหตุการณ์นอกเส้นทาง</div></div>
+      <div class="kpi k1"><div class="ic">🚚</div><div class="big">${new Set(allEvents.map(x=>x.t.id)).size}</div><div class="lbl">เที่ยวที่มีปัญหา</div></div>
+      <div class="kpi k4"><div class="ic">⏱️</div><div class="big">${totalMin}</div><div class="lbl">รวมเวลานอกเส้น (นาที)</div></div>
+      <div class="kpi k2"><div class="ic">📍</div><div class="big">${maxD}</div><div class="lbl">ห่างสูงสุด (ม.)</div></div>
+    </div>
+    <div class="panel"><h3>เหตุการณ์ (${from} → ${today})</h3><div style="overflow:auto;max-height:520px">
+      <table class="rtbl"><thead><tr><th>วันที่</th><th>เที่ยว</th><th>ทะเบียน</th><th>เริ่ม</th><th>สิ้นสุด</th><th>นาน</th><th>ห่างสุด</th></tr></thead>
+      <tbody>${allEvents.length?allEvents.map(x=>`<tr>
+        <td>${x.t.trip_date}</td><td>${esc(x.t.trip_code)}</td><td>${esc(x.t.vehicles?x.t.vehicles.plate_no:'-')}</td>
+        <td>${fmtTime(x.e.start)}</td><td>${fmtTime(x.e.end)}</td><td>${x.e.min} น.</td><td>${x.e.maxDist} ม.</td>
+      </tr>`).join(''):'<tr><td colspan="7" class="muted" style="text-align:center;padding:20px">ไม่พบการวิ่งนอกเส้นทาง 🎉</td></tr>'}</tbody></table>
+    </div>${list.length>=80?'<div class="muted" style="margin-top:8px;font-size:12px">* วิเคราะห์สูงสุด 80 เที่ยวล่าสุด</div>':''}</div>`;
+}
+
+/* ================= ตั้งค่า ================= */
+function renderSettings(){
+  $('#settingsView').innerHTML=`
+    <div class="topbar"><div><h1>⚙️ ตั้งค่า</h1><div class="sub">บัญชี · เกณฑ์นอกเส้นทาง · LINE</div></div></div>
+    <div class="grid2">
+      <div style="display:flex;flex-direction:column;gap:16px">
+        <div class="panel"><h3>👤 บัญชีผู้ใช้</h3>
+          <div class="setrow"><span>ชื่อ</span><b>${esc((me&&me.full_name)||'-')}</b></div>
+          <div class="setrow"><span>อีเมล</span><b>${esc((me&&me.email)||'-')}</b></div>
+          <div class="setrow"><span>สิทธิ์</span><b>${esc((me&&me.role)||'-')}</b></div>
+          <div style="margin-top:10px"><a class="btn ghost sm" href="admin.html">จัดการพนักงาน →</a></div>
+        </div>
+        <div class="panel"><h3>⚠️ เกณฑ์ตรวจวิ่งนอกเส้นทาง</h3>
+          <label class="fl">ระยะห่างจากเส้นแผน (เมตร)</label><input type="number" id="setM" value="${OFF_M}" min="50" step="10">
+          <label class="fl">ระยะเวลาต่อเนื่อง (นาที)</label><input type="number" id="setMin" value="${OFF_MIN}" min="1" step="1">
+          <button class="btn sm" id="saveSet" style="margin-top:12px">💾 บันทึกเกณฑ์</button>
+          <div class="muted" style="font-size:12px;margin-top:8px">มีผลกับหน้าแดชบอร์ด/รายงานทันที (เก็บในเครื่องนี้)</div>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:16px">
+        <div class="panel"><h3>📤 การแจ้งเตือน LINE</h3>
+          <div class="setrow"><span>สถานะ</span><b id="lineStat">กำลังตรวจ...</b></div>
+          <div class="muted" style="font-size:13px;line-height:1.7;margin-top:8px">
+            ปุ่ม "ส่ง LINE" ในรายละเอียดเที่ยวเรียก Edge Function <code>notify-line</code><br>
+            การตั้งค่า:<br>1. สร้าง Messaging API channel ที่ LINE Developers<br>
+            2. คัดลอก Channel access token<br>
+            3. deploy Edge Function <code>notify-line</code> + ตั้ง token เป็น secret</div>
+        </div>
+        <div class="panel"><h3>🔗 ทางลัด</h3>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <a class="btn ghost sm" href="admin.html">🗺️ วางแผนเส้นทาง / รถ / พนักงาน</a>
+            <a class="btn ghost sm" href="stores.html">🏪 จัดการร้านค้า</a>
+            <a class="btn ghost sm" href="map.html">📍 แผนที่ร้าน</a>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  $('#saveSet').onclick=()=>{
+    const m=Math.max(50,+$('#setM').value||200),mn=Math.max(1,+$('#setMin').value||2);
+    SETTINGS.offM=m;SETTINGS.offMin=mn;OFF_M=m;OFF_MIN=mn;
+    localStorage.setItem(SET_KEY,JSON.stringify(SETTINGS));
+    toast('บันทึกเกณฑ์แล้ว: '+m+' ม. / '+mn+' นาที');
+  };
+  checkLine();
+}
+async function checkLine(){
+  const el=$('#lineStat');if(!el)return;
+  try{const{error}=await sb.functions.invoke('notify-line',{body:{ping:true}});
+    el.textContent=error?'ยังไม่ได้ตั้งค่า':'พร้อมใช้งาน ✅';el.style.color=error?'var(--warn)':'var(--ok)';
+  }catch(e){el.textContent='ยังไม่ได้ตั้งค่า';el.style.color='var(--warn)';}
+}
 
 function statusTh(s){return{planned:'วางแผน',live:'กำลังส่ง',delayed:'ล่าช้า',alert:'แจ้งเตือน',done:'สำเร็จ',cancelled:'ยกเลิก'}[s]||s;}
 function fmtTime(iso){try{return new Date(iso).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'});}catch(e){return iso;}}

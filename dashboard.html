@@ -344,7 +344,8 @@ async function openDetail(id){
   const t=trips.find(x=>x.id===id); const ss=stopsByTrip[id]||[];
   // load gps pings + proofs count
   const{data:pings}=await sb.from('gps_pings').select('lat,lng,recorded_at,accuracy_m').eq('trip_id',id).order('recorded_at');
-  const off=detectOffRoute(t,ss,pings||[]);
+  const planRoad=await roadRoute(planPoints(t,ss));
+  const off=detectOffRoute(planRoad,pings||[]);
   $('#overView').style.display='none';$('#detailView').style.display='block';
   const s=tripStats(t);
   const dur=(t.actual_depart&&t.actual_finish)?Math.round((new Date(t.actual_finish)-new Date(t.actual_depart))/60000):null;
@@ -374,7 +375,7 @@ async function openDetail(id){
   $('#backBtn').onclick=()=>{showOverview();};
   $('#lineBtn').onclick=()=>notifyLine(t,s,off);
   renderTimeline(t,ss,off);
-  setTimeout(()=>drawDetailMap(t,ss,pings||[],off),60);
+  setTimeout(()=>drawDetailMap(t,ss,pings||[],off,planRoad),60);
 }
 async function loadCrew(id){
   const{data}=await sb.from('trip_crew').select('crew_role, profiles(full_name)').eq('trip_id',id);
@@ -392,12 +393,11 @@ function renderTimeline(t,ss,off){
   if(t.actual_finish)html+=`<div class="tlitem done"><span class="dot"></span><div class="tt">จบงาน</div><div class="tm">${fmtTime(t.actual_finish)}</div></div>`;
   $('#timeline').innerHTML=html;
 }
-function drawDetailMap(t,ss,pings,off){
+function drawDetailMap(t,ss,pings,off,planRoad){
   const dm=L.map('dmap').setView([15.11,105.82],12);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OSM'}).addTo(dm);
   const all=[];
-  const plan=[]; if(t.origin_lat)plan.push([t.origin_lat,t.origin_lng]);
-  ss.forEach(s=>{if(s.customers&&s.customers.lat)plan.push([s.customers.lat,s.customers.lng]);});
+  const plan=(planRoad&&planRoad.length>1)?planRoad:planPoints(t,ss);   // เส้นแผนตามถนนจริง
   if(plan.length>1){L.polyline(plan,{color:'#0f9d58',weight:4,opacity:.8,dashArray:'6,6'}).addTo(dm);all.push(...plan);}
   // actual
   const act=pings.map(p=>[p.lat,p.lng]);
@@ -412,12 +412,27 @@ function drawDetailMap(t,ss,pings,off){
   if(all.length)dm.fitBounds(all,{padding:[30,30],maxZoom:15});
 }
 
-/* ---------- off-route detection (client-side) ---------- */
-function detectOffRoute(t,ss,pings){
-  const plan=[]; if(t&&t.origin_lat)plan.push([t.origin_lat,t.origin_lng]);
-  ss.forEach(s=>{if(s.customers&&s.customers.lat)plan.push([s.customers.lat,s.customers.lng]);});
+/* ---------- เส้นทางตามถนนจริง (OSRM ฟรี ไม่ต้องมี key) ---------- */
+function planPoints(t,ss){const p=[];if(t&&t.origin_lat)p.push([t.origin_lat,t.origin_lng]);
+  ss.forEach(s=>{if(s.customers&&s.customers.lat)p.push([s.customers.lat,s.customers.lng]);});return p;}
+const _routeCache={};
+async function roadRoute(pts){
+  if(!pts||pts.length<2)return pts||[];
+  const key=pts.map(p=>p[0].toFixed(5)+','+p[1].toFixed(5)).join(';');
+  if(_routeCache[key])return _routeCache[key];
+  const coords=pts.map(p=>p[1]+','+p[0]).join(';');   // OSRM รับ lng,lat
+  try{
+    const r=await fetch(`https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson`);
+    const j=await r.json();
+    if(j&&j.routes&&j.routes[0]){const line=j.routes[0].geometry.coordinates.map(c=>[c[1],c[0]]);_routeCache[key]=line;return line;}
+  }catch(e){}
+  return pts;   // ถ้าเรียกไม่ได้ ใช้เส้นตรงแทน
+}
+
+/* ---------- off-route detection (เทียบกับเส้นถนนจริง) ---------- */
+function detectOffRoute(plan,pings){
   const res={events:[],pings:[],extraKm:0,totalMin:0,maxDist:0};
-  if(plan.length<2||!pings.length)return res;
+  if(!plan||plan.length<2||!pings.length)return res;
   const flagged=pings.map(p=>{const d=distToPolyline(p.lat,p.lng,plan);return {...p,d,off:d>OFF_M};});
   flagged.forEach(p=>{if(p.off){res.pings.push(p);res.maxDist=Math.max(res.maxDist,Math.round(p.d));}});
   // group consecutive off pings
@@ -534,7 +549,8 @@ async function buildOffReport(){
   const allEvents=[];
   for(const t of list){
     const{data:pings}=await sb.from('gps_pings').select('lat,lng,recorded_at').eq('trip_id',t.id).order('recorded_at');
-    detectOffRoute(t,sbt[t.id]||[],pings||[]).events.forEach(e=>allEvents.push({t,e}));
+    const planRoad=await roadRoute(planPoints(t,sbt[t.id]||[]));
+    detectOffRoute(planRoad,pings||[]).events.forEach(e=>allEvents.push({t,e}));
   }
   allEvents.sort((a,b)=>new Date(b.e.start)-new Date(a.e.start));
   const totalMin=allEvents.reduce((s,x)=>s+x.e.min,0);

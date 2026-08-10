@@ -42,6 +42,8 @@
 | `customers_import.sql` | ✅ รันแล้ว | 401 ร้าน |
 | `customers_profile.sql` | ✅ รันแล้ว | คอลัมน์โปรไฟล์ร้าน + `customer_photos` + `customer_orders` + bucket `store-photos` |
 | `driver_phase.sql` | ✅ รันแล้ว | policy ให้คนขับแก้ trip ตัวเอง + bucket `proofs` |
+| `username_login.sql` | ⏳ ต้องรัน | คอลัมน์ `profiles.username` (login ด้วยไอดีแทนอีเมล) |
+| `roles_permissions.sql` | ⏳ ต้องรัน | เพิ่ม role `dc_head` + ตาราง `role_permissions` (เมทริกซ์สิทธิ์ แก้ได้เฉพาะ admin) |
 
 ## 5. Edge Functions
 | ฟังก์ชัน | สถานะ | ใช้ทำ |
@@ -52,7 +54,9 @@
 โค้ดอยู่ที่ `supabase/functions/<ชื่อ>/index.ts` · deploy: Edge Functions → Deploy a new function → Via Editor → วางโค้ด → ตั้งชื่อให้ตรง → Deploy (key ที่จำเป็น Supabase ใส่ให้อัตโนมัติ)
 
 ## 6. RBAC / สิทธิ์
-admin (ทุกอย่าง) · manager (แดชบอร์ด/จัดการ) · driver+helper (เห็นเฉพาะ trip ตัวเอง, ส่ง GPS/เช็คอิน) · viewer (อ่าน)
+admin (ทุกอย่าง) · manager (แดชบอร์ด/จัดการ) · **dc_head หัวหน้า DC (สิทธิ์ระดับ manager)** · driver+helper (เห็นเฉพาะ trip ตัวเอง, ส่ง GPS/เช็คอิน) · viewer (อ่าน)
+- **login ด้วยไอดี:** พนักงานพิมพ์ไอดีสั้น (เช่น `driver01`) ระบบแปลงเป็น `<id>@routeflow.local` ก่อนส่ง Supabase Auth · พิมพ์ที่มี `@` = ใช้เป็นอีเมลจริง (เช่นแอดมินเดิม) · ไอดีเก็บใน `profiles.username`
+- **หน้ากำหนดสิทธิ์** (admin.html แท็บ "🔑 สิทธิ์"): เมทริกซ์ `role_permissions` คุมการแสดง/ใช้เมนูราย role — **แก้ได้เฉพาะ admin** (บังคับด้วย RLS) · เป็น UI-gating ชั้นบน โดยมี RLS ของแต่ละตารางเป็นด่านความปลอดภัยจริง
 - **สร้าง profile admin คนแรก** ต้องรัน SQL bootstrap (insert profiles จาก auth.users) เพราะสร้าง user ตัวแรกผ่าน RLS ไม่ได้
 - พนักงานที่เหลือ: admin สร้างผ่านแท็บทีมงานใน admin.html
 
@@ -89,7 +93,8 @@ index/dashboard/driver/admin/stores/map .html   ← หน้าเว็บ
 config.js                                        ← Supabase config
 schema.postgres.sql                              ← ตาราง+RLS (รันแล้ว)
 customers_import.sql                             ← 401 ร้าน (รันแล้ว, gitignored)
-customers_profile.sql / driver_phase.sql         ← migration (ตรวจว่ารันหรือยัง)
+customers_profile.sql / driver_phase.sql         ← migration (รันแล้ว)
+username_login.sql / roles_permissions.sql        ← migration ใหม่ (⏳ ต้องรัน)
 supabase/functions/admin-create-user/index.ts    ← deploy แล้ว
 supabase/functions/admin-delete-user/index.ts    ← deploy แล้ว
 import_customers.mjs / mymaps_full.kml / *.kmz    ← เครื่องมือ import (gitignored)

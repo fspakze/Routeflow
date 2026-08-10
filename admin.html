@@ -108,6 +108,7 @@
     <button data-tab="plan" class="active">📋 วางแผน trip</button>
     <button data-tab="veh">🚚 รถ</button>
     <button data-tab="crew">👥 ทีมงาน</button>
+    <button data-tab="perms">🔑 สิทธิ์</button>
   </div>
 
   <main id="main" style="display:none">
@@ -179,7 +180,7 @@
           <div class="field"><label class="fl">ชื่อ *</label><input id="uName" placeholder="ชื่อคนขับ/ผู้ช่วย"></div>
           <div class="field"><label class="fl">ไอดีเข้าระบบ *</label><input id="uEmail" type="text" autocapitalize="off" spellcheck="false" placeholder="เช่น driver01"></div>
           <div class="field"><label class="fl">รหัสผ่าน * (≥6 ตัว)</label><input id="uPass" placeholder="ตั้งให้พนักงาน"></div>
-          <div class="field"><label class="fl">บทบาท</label><select id="uRole"><option value="driver">คนขับ (driver)</option><option value="helper">ผู้ช่วย (helper)</option><option value="manager">ผู้จัดการ (manager)</option><option value="viewer">ดูอย่างเดียว (viewer)</option></select></div>
+          <div class="field"><label class="fl">ตำแหน่ง</label><select id="uRole"><option value="driver">คนขับ (driver)</option><option value="helper">ผู้ช่วย (helper)</option><option value="dc_head">หัวหน้า DC (dc_head)</option><option value="manager">ผู้จัดการ (manager)</option><option value="admin">ผู้ดูแลระบบ (admin)</option><option value="viewer">ดูอย่างเดียว (viewer)</option></select></div>
           <div class="field"><label class="fl">เบอร์โทร</label><input id="uPhone" placeholder="020xxxxxxx"></div>
           <div class="field" style="display:flex;align-items:flex-end"><button class="btn" id="addUser">+ สร้างบัญชี</button></div>
         </div>
@@ -195,6 +196,15 @@
           • <code>admin-delete-user</code> ← โค้ดจาก <code>supabase/functions/admin-delete-user/index.ts</code> (ลบบัญชี)<br>
           (Supabase ใส่ key ที่จำเป็นให้อัตโนมัติ) · แก้สิทธิ์/ปิดใช้งาน/แก้ชื่อ ทำได้เลยไม่ต้อง deploy
         </div>
+      </div>
+    </div>
+
+    <!-- PERMISSIONS -->
+    <div class="pane" id="pane-perms">
+      <div class="card">
+        <h3>🔑 กำหนดสิทธิ์แต่ละตำแหน่ง</h3>
+        <div class="hint" style="margin-bottom:10px">คุมว่าตำแหน่งไหนเห็น/ใช้เมนูอะไรได้ · ความปลอดภัยข้อมูลจริงยังมี RLS เป็นด่านสุดท้ายเสมอ · <b>แก้ไขได้เฉพาะ Admin</b></div>
+        <div style="overflow:auto" id="permsBody"></div>
       </div>
     </div>
   </main>
@@ -259,13 +269,45 @@ $$('.tabs button').forEach(b=>b.onclick=()=>{
 });
 
 async function loadAll(){
-  const[cRes,vRes,pRes]=await Promise.all([
+  const[cRes,vRes,pRes,rpRes]=await Promise.all([
     sb.from('customers').select('id,name,code,category,lat,lng').not('lat','is',null).limit(5000),
     sb.from('vehicles').select('*').order('plate_no'),
-    sb.from('profiles').select('id,full_name,role,phone,is_active,username').order('role')
+    sb.from('profiles').select('id,full_name,role,phone,is_active,username').order('role'),
+    sb.from('role_permissions').select('*')
   ]);
   customers=cRes.data||[]; vehicles=vRes.data||[]; crew=pRes.data||[];
-  renderVehSelect(); renderCrewPick(); renderVehTable(); renderCrewTable(); buildPlanMap();
+  perms={}; (rpRes.data||[]).forEach(r=>perms[r.role]=r); myPerm=perms[me.role]||{};
+  renderVehSelect(); renderCrewPick(); renderVehTable(); renderCrewTable(); renderPerms(); applyTabGating(); buildPlanMap();
+}
+/* ---------- PERMISSIONS ---------- */
+function applyTabGating(){
+  const noMatrix=Object.keys(perms).length===0;   // ยังไม่ได้รัน roles_permissions.sql → ไม่ gate (โชว์ตามเดิม)
+  const map={plan:'can_plan',veh:'can_vehicles',crew:'can_staff'};
+  const isAdmin=(me.role==='admin');
+  $$('.tabs button').forEach(b=>{const t=b.dataset.tab;let show=true;
+    if(t==='perms')show=isAdmin;
+    else if(!noMatrix&&map[t])show=isAdmin||!!myPerm[map[t]];
+    b.style.display=show?'':'none';});
+  const active=$('.tabs button.active');
+  if(active&&active.style.display==='none'){const first=[...$$('.tabs button')].find(b=>b.style.display!=='none');if(first)first.click();}
+}
+function renderPerms(){
+  const host=$('#permsBody'); if(!host)return;
+  const isAdmin=(me.role==='admin');
+  const roles=ROLES.filter(r=>perms[r]);
+  if(!roles.length){host.innerHTML='<div class="muted">ยังไม่มีตาราง role_permissions — รัน <code>roles_permissions.sql</code> ใน Supabase ก่อน</div>';return;}
+  host.innerHTML=`<table><tr><th>ตำแหน่ง</th>${PERMS.map(p=>`<th style="text-align:center;font-size:11px">${p[1]}</th>`).join('')}</tr>
+    ${roles.map(r=>`<tr><td><b>${esc(ROLE_LABEL[r]||r)}</b> <span class="muted" style="font-size:11px">${r}</span></td>
+      ${PERMS.map(p=>`<td style="text-align:center"><input type="checkbox" style="width:auto" data-r="${r}" data-p="${p[0]}" ${perms[r][p[0]]?'checked':''} ${(isAdmin&&r!=='admin')?'':'disabled'}></td>`).join('')}
+    </tr>`).join('')}</table>
+    <div class="hint" style="margin-top:8px">${isAdmin?'ติ๊ก/เอาออก = บันทึกทันที · ตำแหน่ง admin ล็อกไว้ (สิทธิ์เต็มเสมอ)':'⚠️ เฉพาะ Admin แก้ไขสิทธิ์ได้ — คุณดูได้อย่างเดียว'}</div>`;
+  if(isAdmin)host.querySelectorAll('input[data-p]').forEach(cb=>cb.onchange=async()=>{
+    const r=cb.dataset.r,k=cb.dataset.p,val=cb.checked;
+    const{error}=await sb.from('role_permissions').update({[k]:val,updated_at:new Date().toISOString()}).eq('role',r);
+    if(error){toast('บันทึกไม่ได้: '+error.message);cb.checked=!val;return;}
+    perms[r][k]=val; toast('อัปเดตสิทธิ์ '+(ROLE_LABEL[r]||r)+' แล้ว');
+    if(r===me.role){myPerm=perms[r];applyTabGating();}
+  });
 }
 
 /* ---------- PLAN ---------- */
@@ -483,7 +525,8 @@ $('#addUser').onclick=async()=>{
     }
     if(data&&data.error)throw new Error(data.error);
     if(!data||data.ok!==true)throw new Error('ฟังก์ชันไม่ได้สร้าง user จริง — โค้ดที่ deploy ยังเป็น template เดิม ไม่ใช่ admin-create-user');
-    if(data.id){await sb.from('profiles').update({username:idRaw}).eq('id',data.id);}
+    // ตั้ง username + ตำแหน่งจริง (Edge Function จำกัดบางตำแหน่ง จึงยืนยันซ้ำฝั่ง admin)
+    if(data.id){await sb.from('profiles').update({username:idRaw,role}).eq('id',data.id);}
     ['#uName','#uEmail','#uPass','#uPhone'].forEach(s=>$(s).value='');
     toast('✅ สร้างบัญชี '+full_name+' (ไอดี: '+idRaw+') แล้ว'); await loadAll();
   }catch(e){
@@ -494,7 +537,10 @@ $('#addUser').onclick=async()=>{
   }
   $('#addUser').disabled=false;$('#addUser').textContent='+ สร้างบัญชี';
 };
-const ROLES=['admin','manager','driver','helper','viewer'];
+const ROLES=['admin','manager','dc_head','driver','helper','viewer'];
+const ROLE_LABEL={admin:'ผู้ดูแลระบบ',manager:'ผู้จัดการ',dc_head:'หัวหน้า DC',driver:'คนขับ',helper:'ผู้ช่วย',viewer:'ดูอย่างเดียว'};
+const PERMS=[['can_dashboard','แดชบอร์ด'],['can_plan','วางแผน trip'],['can_stores','จัดการร้าน'],['can_vehicles','จัดการรถ'],['can_reports','รายงาน'],['can_staff','จัดการพนักงาน'],['can_driver_app','แอปคนขับ']];
+let perms={}, myPerm={};
 function renderCrewTable(){
   const el=$('#crewTable');
   if(!crew.length){el.innerHTML='<div class="muted">ยังไม่มีทีมงาน — เพิ่มด้านบน</div>';return;}
@@ -503,7 +549,7 @@ function renderCrewTable(){
     return `<tr style="${off?'opacity:.5':''}">
     <td><b>${esc(c.full_name)}</b>${self?' <span class="pill">คุณ</span>':''}</td>
     <td>${c.username?'<span class="pill" style="background:#e6effd;color:#2563eb">'+esc(c.username)+'</span>':'<span class="muted">(อีเมล)</span>'}</td>
-    <td><select data-role="${c.id}" ${self?'disabled title="แก้สิทธิ์ตัวเองไม่ได้"':''}>${ROLES.map(r=>`<option ${c.role===r?'selected':''}>${r}</option>`).join('')}</select></td>
+    <td><select data-role="${c.id}" ${self?'disabled title="แก้สิทธิ์ตัวเองไม่ได้"':''}>${ROLES.map(r=>`<option value="${r}" ${c.role===r?'selected':''}>${ROLE_LABEL[r]||r}</option>`).join('')}</select></td>
     <td>${esc(c.phone||'-')}</td>
     <td>${off?'<span style="color:var(--bad)">ปิด</span>':'<span class="ok">เปิด</span>'}</td>
     <td style="white-space:nowrap">

@@ -81,7 +81,7 @@ git push
 - **publishable key ใน config.js เป็นสาธารณะได้** — ความปลอดภัยอยู่ที่ RLS ต้องเปิดครบทุกตาราง (ห้ามปิด) · **service_role อยู่ใน Edge Function เท่านั้น**
 - **GPS ต้อง HTTPS** — ใช้บนมือถือได้เพราะ Pages เป็น https (localhost ก็ได้) · iOS จำกัด background GPS แนะนำ Android เปิดจอค้าง
 - **ลบพนักงานที่อยู่ใน trip_crew ไม่ได้** (FK) → ใช้ปุ่ม "ปิดใช้งาน" แทน
-- **route_plan_points ยังไม่ถูกสร้างตอนวางแผน** — dashboard ใช้ origin+จุดส่งเป็นเส้นแผนแทน (พอใช้ได้ แต่ถ้าอยากเทียบถนนจริงต้องต่อ routing engine เช่น OSRM)
+- **เส้นแผน = ถนนจริง (OSRM):** dashboard คำนวณเส้นทางตามถนนจริงผ่าน OSRM (`router.project-osrm.org` ฟรี ไม่ต้องมี key) ใช้ทั้งวาดแผนที่ + ตรวจนอกเส้นทาง (>200ม./2นาที เทียบถนนจริง) · fallback เป็นเส้นตรงถ้าเรียก OSRM ไม่ได้ · OSRM public server เหมาะ dev — ถ้า production หนักควร self-host
 
 ## 10. งานที่เหลือ (Todo)
 > ✅ SQL migration ครบ (customers_profile + driver_phase) · Edge Functions ครบ (create + delete) — **ระบบหลักพร้อมใช้จริงครบวงจร**

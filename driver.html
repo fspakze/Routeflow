@@ -81,6 +81,32 @@
   </main>
   <div class="toast" id="toast"></div>
 
+  <!-- POD modal: หลักฐานการส่ง -->
+  <div id="podModal" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:4000;display:flex;align-items:flex-end;justify-content:center">
+    <div style="background:#fff;width:100%;max-width:480px;border-radius:16px 16px 0 0;padding:16px;max-height:94vh;overflow:auto">
+      <h3 style="margin:0 0 10px">ยืนยันการส่ง — <span id="podStore"></span></h3>
+      <label class="fl">รูปหลักฐาน *</label>
+      <div style="display:flex;gap:8px;align-items:center"><button class="btn gray sm" id="podPhotoBtn">📷 ถ่าย/เลือกรูป</button><span id="podPhotoName" class="muted" style="font-size:12px"></span></div>
+      <img id="podThumb" style="display:none;max-width:100%;max-height:170px;border-radius:8px;margin-top:8px">
+      <label class="fl" style="margin-top:12px">ชื่อผู้รับ</label>
+      <input id="podReceiver" placeholder="ชื่อคนรับของ">
+      <label class="fl" style="margin-top:12px">ลายเซ็นผู้รับ</label>
+      <canvas id="podSign" width="440" height="140" style="border:1px solid var(--line);border-radius:8px;width:100%;height:140px;touch-action:none;background:#fff"></canvas>
+      <div style="text-align:right"><button class="btn gray sm" id="podClearSign" style="margin-top:4px">ล้างลายเซ็น</button></div>
+      <label class="fl" style="margin-top:8px">ผลการส่ง</label>
+      <div style="display:flex;gap:8px" id="podResult">
+        <button class="btn sm" data-res="delivered" style="flex:1">ส่งครบ</button>
+        <button class="btn gray sm" data-res="partial" style="flex:1">ส่งบางส่วน</button>
+        <button class="btn gray sm" data-res="returned" style="flex:1">ตีกลับ</button>
+      </div>
+      <div id="podReasonWrap" style="display:none;margin-top:10px"><label class="fl">เหตุผล *</label><input id="podReason" placeholder="เช่น ของไม่ครบ / ร้านปฏิเสธรับ"></div>
+      <div style="display:flex;gap:8px;margin-top:14px">
+        <button class="btn ok" id="podSave" style="flex:1">บันทึกการส่ง</button>
+        <button class="btn gray" id="podCancel">ยกเลิก</button>
+      </div>
+    </div>
+  </div>
+
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="config.js"></script>
@@ -283,29 +309,70 @@ async function arriveStop(id,auto){
   s.status='arrived';s.actual_arrive=new Date().toISOString();
   toast('📍 ถึง '+(s.customers?s.customers.name:'ร้าน')); updateStopUI();
 }
-async function deliverStop(id){
+/* ---------- POD: หลักฐานการส่ง (รูป + ผู้รับ + ลายเซ็น + ผลการส่ง) ---------- */
+let podStopId=null, podFile=null, podResult='delivered', signPad=null;
+function deliverStop(id){ openPod(id); }
+function openPod(id){
   const s=stops.find(x=>x.id===id); if(!s)return;
-  const inp=document.createElement('input'); inp.type='file'; inp.accept='image/*'; inp.capture='environment';
-  inp.onchange=async()=>{
-    const f=inp.files[0]; if(!f)return;
-    toast('กำลังอัปโหลดรูป...');
-    try{
-      const path=`${trip.id}/${id}_${Date.now()}.jpg`;
-      const{error:ue}=await sb.storage.from('proofs').upload(path,f,{upsert:false}); if(ue)throw ue;
-      let lat=lastPos?lastPos.coords.latitude:null,lng=lastPos?lastPos.coords.longitude:null;
-      await sb.from('delivery_proofs').insert({trip_stop_id:id,proof_type:'photo',file_path:path,
-        captured_lat:lat,captured_lng:lng,captured_at:new Date().toISOString(),captured_by:me.id});
-      const now=new Date().toISOString();
-      const upd={status:'delivered',actual_depart:now};
-      if(!s.actual_arrive)upd.actual_arrive=now;
-      if(s.actual_arrive)upd.dwell_min=Math.max(0,Math.round((Date.now()-new Date(s.actual_arrive))/60000));
-      const{error:se}=await sb.from('trip_stops').update(upd).eq('id',id); if(se)throw se;
-      Object.assign(s,upd);
-      toast('✅ ส่งสำเร็จ '+(s.customers?s.customers.name:'')); updateStopUI();
-    }catch(e){toast('ยืนยันส่งไม่สำเร็จ: '+(e.message||e));}
-  };
-  inp.click();
+  podStopId=id; podFile=null; podResult='delivered';
+  $('#podStore').textContent=s.customers?s.customers.name:'ร้าน';
+  $('#podPhotoName').textContent=''; $('#podThumb').style.display='none';
+  $('#podReceiver').value=''; $('#podReason').value=''; $('#podReasonWrap').style.display='none';
+  setPodResult('delivered');
+  $('#podModal').classList.remove('hidden');
+  if(!signPad)signPad=initSignPad(); signPad.clear();
 }
+function closePod(){ $('#podModal').classList.add('hidden'); }
+function setPodResult(r){ podResult=r;
+  $$('#podResult button').forEach(b=>b.classList.toggle('gray',b.dataset.res!==r));
+  $('#podReasonWrap').style.display=(r==='delivered')?'none':'block';
+}
+function initSignPad(){
+  const cv=$('#podSign'),ctx=cv.getContext('2d'); ctx.lineWidth=2.2;ctx.lineCap='round';ctx.strokeStyle='#111';
+  let drawing=false,last=null,dirty=false;
+  const pos=e=>{const r=cv.getBoundingClientRect();const t=e.touches?e.touches[0]:e;return{x:(t.clientX-r.left)*(cv.width/r.width),y:(t.clientY-r.top)*(cv.height/r.height)};};
+  const start=e=>{drawing=true;last=pos(e);e.preventDefault();};
+  const move=e=>{if(!drawing)return;const p=pos(e);ctx.beginPath();ctx.moveTo(last.x,last.y);ctx.lineTo(p.x,p.y);ctx.stroke();last=p;dirty=true;e.preventDefault();};
+  const end=()=>{drawing=false;};
+  cv.addEventListener('mousedown',start);cv.addEventListener('mousemove',move);window.addEventListener('mouseup',end);
+  cv.addEventListener('touchstart',start,{passive:false});cv.addEventListener('touchmove',move,{passive:false});cv.addEventListener('touchend',end);
+  return {clear:()=>{ctx.clearRect(0,0,cv.width,cv.height);dirty=false;},data:()=>dirty?cv.toDataURL('image/png'):null};
+}
+$('#podCancel').onclick=closePod;
+$('#podClearSign').onclick=()=>{if(signPad)signPad.clear();};
+$$('#podResult button').forEach(b=>b.onclick=()=>setPodResult(b.dataset.res));
+$('#podPhotoBtn').onclick=()=>{
+  const inp=document.createElement('input'); inp.type='file'; inp.accept='image/*'; inp.capture='environment';
+  inp.onchange=()=>{const f=inp.files[0];if(!f)return;podFile=f;$('#podPhotoName').textContent=f.name||'เลือกรูปแล้ว';
+    const rd=new FileReader();rd.onload=e=>{$('#podThumb').src=e.target.result;$('#podThumb').style.display='block';};rd.readAsDataURL(f);};
+  inp.click();
+};
+$('#podSave').onclick=async()=>{
+  const id=podStopId, s=stops.find(x=>x.id===id); if(!s)return;
+  const receiver=$('#podReceiver').value.trim(), reason=$('#podReason').value.trim();
+  if(podResult!=='returned'&&!podFile){toast('กรุณาถ่ายรูปหลักฐาน');return;}
+  if(podResult!=='delivered'&&!reason){toast('กรุณาใส่เหตุผล');return;}
+  $('#podSave').disabled=true;$('#podSave').textContent='กำลังบันทึก...';
+  try{
+    let path=null;
+    if(podFile){path=`${trip.id}/${id}_${Date.now()}.jpg`;
+      const{error:ue}=await sb.storage.from('proofs').upload(path,podFile,{upsert:false}); if(ue)throw ue;}
+    const lat=lastPos?lastPos.coords.latitude:null,lng=lastPos?lastPos.coords.longitude:null;
+    await sb.from('delivery_proofs').insert({trip_stop_id:id,proof_type:'photo',file_path:path,
+      captured_lat:lat,captured_lng:lng,captured_at:new Date().toISOString(),captured_by:me.id,
+      received_by:receiver||null,signature:signPad?signPad.data():null,result:podResult,reason:reason||null});
+    const now=new Date().toISOString();
+    const upd=(podResult==='returned')?{status:'failed',note:reason}:{status:'delivered',actual_depart:now,note:podResult==='partial'?('ส่งบางส่วน: '+reason):null};
+    if(!s.actual_arrive)upd.actual_arrive=now;
+    if(s.actual_arrive&&podResult!=='returned')upd.dwell_min=Math.max(0,Math.round((Date.now()-new Date(s.actual_arrive))/60000));
+    const{error:se}=await sb.from('trip_stops').update(upd).eq('id',id); if(se)throw se;
+    Object.assign(s,upd);
+    closePod();
+    toast(podResult==='returned'?'บันทึกตีกลับแล้ว':podResult==='partial'?'บันทึกส่งบางส่วนแล้ว':'✅ ส่งสำเร็จ '+(s.customers?s.customers.name:''));
+    updateStopUI();
+  }catch(e){toast('บันทึกไม่สำเร็จ: '+(e.message||e));}
+  $('#podSave').disabled=false;$('#podSave').textContent='บันทึกการส่ง';
+};
 async function skipStop(id){
   const note=prompt('เหตุผลที่ข้าม/ส่งไม่ได้ (เช่น ร้านปิด):','');
   if(note===null)return;

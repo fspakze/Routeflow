@@ -115,7 +115,7 @@
   <!-- gate -->
   <div id="gate"><div class="box">
     <h1>📊 RouteFlow แดชบอร์ด</h1><p>เข้าสู่ระบบ (ผู้จัดการ)</p>
-    <label class="fl">อีเมล</label><input id="email" type="email">
+    <label class="fl">ไอดี หรือ อีเมล</label><input id="email" type="text" autocapitalize="off" spellcheck="false">
     <label class="fl">รหัสผ่าน</label><input id="password" type="password">
     <button id="loginBtn">เข้าสู่ระบบ</button><div class="err" id="gerr"></div>
   </div></div>
@@ -210,10 +210,12 @@ const LCOL=['#ea580c','#dc2626','#2563eb','#f59e0b','#0f9d58','#9333ea','#0891b2
 $('#loginBtn').onclick=login;$('#password').addEventListener('keydown',e=>{if(e.key==='Enter')login();});
 $('#logoutBtn').onclick=async()=>{await sb.auth.signOut();location.reload();};
 
+const RF_DOMAIN='routeflow.local';
+function idToEmail(v){v=(v||'').trim().toLowerCase();return v?(v.includes('@')?v:v.replace(/\s+/g,'')+'@'+RF_DOMAIN):'';}
 async function login(){
-  const url=window.RF_CONFIG&&RF_CONFIG.url,key=window.RF_CONFIG&&RF_CONFIG.anonKey,email=$('#email').value.trim(),pw=$('#password').value;
+  const url=window.RF_CONFIG&&RF_CONFIG.url,key=window.RF_CONFIG&&RF_CONFIG.anonKey,email=idToEmail($('#email').value),pw=$('#password').value;
   $('#gerr').textContent='';if(!url||!key){$('#gerr').textContent='config.js ไม่ถูกโหลด';return;}
-  if(!email||!pw){$('#gerr').textContent='กรอกอีเมล+รหัสผ่าน';return;}
+  if(!email||!pw){$('#gerr').textContent='กรอกไอดี+รหัสผ่าน';return;}
   $('#loginBtn').disabled=true;$('#loginBtn').textContent='กำลังเข้า...';
   try{
     sb=sb||supabase.createClient(url,key);

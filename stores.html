@@ -59,7 +59,7 @@
 <div id="app">
   <div id="gate"><div class="box">
     <h1>🏪 จัดการร้านค้า</h1><p>เข้าสู่ระบบ</p>
-    <label class="fl">อีเมล</label><input id="email" type="email">
+    <label class="fl">ไอดี หรือ อีเมล</label><input id="email" type="text" autocapitalize="off" spellcheck="false">
     <label class="fl">รหัสผ่าน</label><input id="password" type="password">
     <button id="loginBtn">เข้าสู่ระบบ</button>
     <div class="err" id="gerr"></div>
@@ -99,8 +99,10 @@ let sb=null,me=null,rows=[],cur=null,pickMap=null,pickMarker=null,cats=[];
 
 $('#loginBtn').onclick=login;$('#password').addEventListener('keydown',e=>{if(e.key==='Enter')login();});
 
+const RF_DOMAIN='routeflow.local';
+function idToEmail(v){v=(v||'').trim().toLowerCase();return v?(v.includes('@')?v:v.replace(/\s+/g,'')+'@'+RF_DOMAIN):'';}
 async function login(){
-  const url=window.RF_CONFIG&&RF_CONFIG.url,key=window.RF_CONFIG&&RF_CONFIG.anonKey,email=$('#email').value.trim(),pw=$('#password').value;
+  const url=window.RF_CONFIG&&RF_CONFIG.url,key=window.RF_CONFIG&&RF_CONFIG.anonKey,email=idToEmail($('#email').value),pw=$('#password').value;
   $('#gerr').textContent='';if(!url||!key){$('#gerr').textContent='config.js ไม่ถูกโหลด';return;}
   if(!email||!pw){$('#gerr').textContent='กรอกอีเมล+รหัสผ่าน';return;}
   $('#loginBtn').disabled=true;$('#loginBtn').textContent='กำลังเข้า...';

@@ -85,8 +85,8 @@
       <h1>🚚 RouteFlow</h1>
       <p>แผนที่ร้านค้า — เข้าสู่ระบบก่อนดูข้อมูล</p>
 
-      <label>อีเมล</label>
-      <input id="email" type="email" placeholder="you@email.com" autocomplete="username" />
+      <label>ไอดี หรือ อีเมล</label>
+      <input id="email" type="text" placeholder="เช่น driver01" autocapitalize="off" spellcheck="false" autocomplete="username" />
       <label>รหัสผ่าน</label>
       <input id="password" type="password" placeholder="••••••••" autocomplete="current-password" />
 
@@ -129,12 +129,14 @@ const SHAPE_LABEL={circle:'วงกลม',square:'สี่เหลี่ย�
 $('#loginBtn').addEventListener('click', login);
 $('#password').addEventListener('keydown', e => { if(e.key==='Enter') login(); });
 
+const RF_DOMAIN='routeflow.local';
+function idToEmail(v){v=(v||'').trim().toLowerCase();return v?(v.includes('@')?v:v.replace(/\s+/g,'')+'@'+RF_DOMAIN):'';}
 async function login(){
   const url=window.RF_CONFIG&&RF_CONFIG.url, key=window.RF_CONFIG&&RF_CONFIG.anonKey;
-  const email=$('#email').value.trim(), pw=$('#password').value;
+  const email=idToEmail($('#email').value), pw=$('#password').value;
   $('#err').textContent='';
   if(!url||!key){ $('#err').textContent='config.js ไม่ถูกโหลด'; return; }
-  if(!email||!pw){ $('#err').textContent='กรอกอีเมลและรหัสผ่าน'; return; }
+  if(!email||!pw){ $('#err').textContent='กรอกไอดีและรหัสผ่าน'; return; }
   $('#loginBtn').disabled=true; $('#loginBtn').textContent='กำลังเข้าสู่ระบบ...';
   try{
     sb = sb || supabase.createClient(url, key);

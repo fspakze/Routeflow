@@ -91,7 +91,7 @@
   <div id="gate"><div class="box">
     <h1>🚚 RouteFlow — จัดการ</h1>
     <p>เข้าสู่ระบบ (ต้องเป็น admin/manager)</p>
-    <label>อีเมล</label><input id="email" type="email" />
+    <label>ไอดี หรือ อีเมล</label><input id="email" type="text" autocapitalize="off" autocorrect="off" spellcheck="false" />
     <label>รหัสผ่าน</label><input id="password" type="password" />
     <button id="loginBtn">เข้าสู่ระบบ</button>
     <div class="err" id="gerr"></div>
@@ -177,14 +177,14 @@
         <h3>➕ เพิ่มทีมงานใหม่ (สร้างบัญชี login ให้เลย)</h3>
         <div class="row">
           <div class="field"><label class="fl">ชื่อ *</label><input id="uName" placeholder="ชื่อคนขับ/ผู้ช่วย"></div>
-          <div class="field"><label class="fl">อีเมล (ใช้ login) *</label><input id="uEmail" type="email" placeholder="driver1@email.com"></div>
+          <div class="field"><label class="fl">ไอดีเข้าระบบ *</label><input id="uEmail" type="text" autocapitalize="off" spellcheck="false" placeholder="เช่น driver01"></div>
           <div class="field"><label class="fl">รหัสผ่าน * (≥6 ตัว)</label><input id="uPass" placeholder="ตั้งให้พนักงาน"></div>
           <div class="field"><label class="fl">บทบาท</label><select id="uRole"><option value="driver">คนขับ (driver)</option><option value="helper">ผู้ช่วย (helper)</option><option value="manager">ผู้จัดการ (manager)</option><option value="viewer">ดูอย่างเดียว (viewer)</option></select></div>
           <div class="field"><label class="fl">เบอร์โทร</label><input id="uPhone" placeholder="020xxxxxxx"></div>
           <div class="field" style="display:flex;align-items:flex-end"><button class="btn" id="addUser">+ สร้างบัญชี</button></div>
         </div>
         <div class="err" id="uerr"></div>
-        <div class="hint">ระบบจะสร้างบัญชี login + โปรไฟล์ให้อัตโนมัติ (ยืนยันอีเมลให้เลย) พนักงานเอาอีเมล+รหัสไป login ใน PWA ได้ทันที</div>
+        <div class="hint">ระบบสร้างบัญชี login + โปรไฟล์ให้อัตโนมัติ พนักงานเอา <b>ไอดี + รหัสผ่าน</b> ไป login ได้ทันที (ไอดีใช้ a-z 0-9 . _ - ไม่ต้องมีอีเมลจริง)</div>
       </div>
       <div class="card"><h3>ทีมงานทั้งหมด</h3><div id="crewTable"></div></div>
       <div class="card">
@@ -218,11 +218,15 @@ const SHAPE_LABEL={circle:'วงกลม',square:'สี่เหลี่ย�
 $('#loginBtn').onclick=login; $('#password').addEventListener('keydown',e=>{if(e.key==='Enter')login();});
 $('#tDate').value=new Date().toISOString().slice(0,10);
 
+// ไอดี → อีเมลภายใน (ถ้าพิมพ์มี @ = ใช้เป็นอีเมลจริง เช่นแอดมินเดิม)
+const RF_DOMAIN='routeflow.local';
+function idToEmail(v){v=(v||'').trim().toLowerCase();return v?(v.includes('@')?v:v.replace(/\s+/g,'')+'@'+RF_DOMAIN):'';}
+
 async function login(){
-  const url=window.RF_CONFIG&&RF_CONFIG.url,key=window.RF_CONFIG&&RF_CONFIG.anonKey,email=$('#email').value.trim(),pw=$('#password').value;
+  const url=window.RF_CONFIG&&RF_CONFIG.url,key=window.RF_CONFIG&&RF_CONFIG.anonKey,email=idToEmail($('#email').value),pw=$('#password').value;
   $('#gerr').textContent='';
   if(!url||!key){$('#gerr').textContent='config.js ไม่ถูกโหลด';return;}
-  if(!email||!pw){$('#gerr').textContent='กรอกอีเมล+รหัสผ่าน';return;}
+  if(!email||!pw){$('#gerr').textContent='กรอกไอดี+รหัสผ่าน';return;}
   $('#loginBtn').disabled=true;$('#loginBtn').textContent='กำลังเข้า...';
   try{
     sb=sb||supabase.createClient(url,key);
@@ -258,7 +262,7 @@ async function loadAll(){
   const[cRes,vRes,pRes]=await Promise.all([
     sb.from('customers').select('id,name,code,category,lat,lng').not('lat','is',null).limit(5000),
     sb.from('vehicles').select('*').order('plate_no'),
-    sb.from('profiles').select('id,full_name,role,phone,is_active').order('role')
+    sb.from('profiles').select('id,full_name,role,phone,is_active,username').order('role')
   ]);
   customers=cRes.data||[]; vehicles=vRes.data||[]; crew=pRes.data||[];
   renderVehSelect(); renderCrewPick(); renderVehTable(); renderCrewTable(); buildPlanMap();
@@ -462,10 +466,13 @@ function renderVehTable(){
 /* ---------- CREW ---------- */
 $('#addUser').onclick=async()=>{
   $('#uerr').textContent='';
-  const full_name=$('#uName').value.trim(),email=$('#uEmail').value.trim(),password=$('#uPass').value,
+  const full_name=$('#uName').value.trim(),idRaw=$('#uEmail').value.trim().toLowerCase(),password=$('#uPass').value,
         role=$('#uRole').value,phone=$('#uPhone').value.trim();
-  if(!full_name||!email||!password){$('#uerr').textContent='กรอกชื่อ/อีเมล/รหัสผ่านให้ครบ';return;}
+  if(!full_name||!idRaw||!password){$('#uerr').textContent='กรอกชื่อ/ไอดี/รหัสผ่านให้ครบ';return;}
+  if(!/^[a-z0-9._@-]+$/.test(idRaw)){$('#uerr').textContent='ไอดีใช้ได้เฉพาะ a-z 0-9 . _ - (ห้ามเว้นวรรค/ภาษาไทย)';return;}
+  if(crew.some(c=>(c.username||'').toLowerCase()===idRaw)){$('#uerr').textContent='ไอดี "'+idRaw+'" ถูกใช้แล้ว เลือกใหม่';return;}
   if(password.length<6){$('#uerr').textContent='รหัสผ่านอย่างน้อย 6 ตัว';return;}
+  const email=idToEmail(idRaw);
   $('#addUser').disabled=true;$('#addUser').textContent='กำลังสร้าง...';
   try{
     const{data,error}=await sb.functions.invoke('admin-create-user',{body:{email,password,full_name,role,phone}});
@@ -476,8 +483,9 @@ $('#addUser').onclick=async()=>{
     }
     if(data&&data.error)throw new Error(data.error);
     if(!data||data.ok!==true)throw new Error('ฟังก์ชันไม่ได้สร้าง user จริง — โค้ดที่ deploy ยังเป็น template เดิม ไม่ใช่ admin-create-user');
+    if(data.id){await sb.from('profiles').update({username:idRaw}).eq('id',data.id);}
     ['#uName','#uEmail','#uPass','#uPhone'].forEach(s=>$(s).value='');
-    toast('✅ สร้างบัญชี '+full_name+' แล้ว'); await loadAll();
+    toast('✅ สร้างบัญชี '+full_name+' (ไอดี: '+idRaw+') แล้ว'); await loadAll();
   }catch(e){
     const m=(e.message||String(e));
     $('#uerr').textContent = m.includes('Failed to send')||m.includes('not found')||m.includes('404')
@@ -490,10 +498,11 @@ const ROLES=['admin','manager','driver','helper','viewer'];
 function renderCrewTable(){
   const el=$('#crewTable');
   if(!crew.length){el.innerHTML='<div class="muted">ยังไม่มีทีมงาน — เพิ่มด้านบน</div>';return;}
-  el.innerHTML=`<table><tr><th>ชื่อ</th><th>บทบาท (สิทธิ์)</th><th>เบอร์</th><th>สถานะ</th><th>จัดการ</th></tr>
+  el.innerHTML=`<table><tr><th>ชื่อ</th><th>ไอดีเข้าระบบ</th><th>บทบาท (สิทธิ์)</th><th>เบอร์</th><th>สถานะ</th><th>จัดการ</th></tr>
   ${crew.map(c=>{const off=c.is_active===false;const self=c.id===me.id;
     return `<tr style="${off?'opacity:.5':''}">
     <td><b>${esc(c.full_name)}</b>${self?' <span class="pill">คุณ</span>':''}</td>
+    <td>${c.username?'<span class="pill" style="background:#e6effd;color:#2563eb">'+esc(c.username)+'</span>':'<span class="muted">(อีเมล)</span>'}</td>
     <td><select data-role="${c.id}" ${self?'disabled title="แก้สิทธิ์ตัวเองไม่ได้"':''}>${ROLES.map(r=>`<option ${c.role===r?'selected':''}>${r}</option>`).join('')}</select></td>
     <td>${esc(c.phone||'-')}</td>
     <td>${off?'<span style="color:var(--bad)">ปิด</span>':'<span class="ok">เปิด</span>'}</td>

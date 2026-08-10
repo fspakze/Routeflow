@@ -145,6 +145,7 @@
           <div>
             <div class="row" style="margin-bottom:8px">
               <b style="flex:1">ลำดับส่ง (<span id="stopCount">0</span> ร้าน)</b>
+              <button class="btn ghost sm" id="optStops" title="จัดลำดับให้ระยะสั้นที่สุด">🔀 จัดลำดับอัตโนมัติ</button>
               <button class="btn ghost sm" id="clearStops">ล้าง</button>
             </div>
             <div id="stopList"><div class="muted" style="font-size:13px">ยังไม่เลือกร้าน — คลิกหมุดบนแผนที่</div></div>
@@ -553,6 +554,26 @@ function renderStops(){
   updatePlanSummary();
 }
 $('#clearStops').onclick=()=>{selected=[];renderStops();};
+$('#optStops').onclick=optimizeStops;
+async function optimizeStops(){
+  if(selected.length<2){toast('ต้องมีอย่างน้อย 2 ร้าน');return;}
+  const ll=$('#tOriginLL').value.trim(); let origin=null;
+  if(ll){const p=ll.split(',');if(p.length===2&&!isNaN(parseFloat(p[0])))origin=[parseFloat(p[0]),parseFloat(p[1])];}
+  const pts=[]; if(origin)pts.push(origin); const startIdx=pts.length;
+  selected.forEach(s=>pts.push([s.lat,s.lng]));
+  const coords=pts.map(p=>p[1]+','+p[0]).join(';');
+  const btn=$('#optStops'),old=btn.textContent; btn.disabled=true; btn.textContent='กำลังจัด...';
+  try{
+    const r=await fetch(`https://router.project-osrm.org/trip/v1/driving/${coords}?source=first&roundtrip=false`);
+    const j=await r.json();
+    if(j.code!=='Ok'||!j.waypoints)throw new Error(j.message||'เรียก OSRM ไม่ได้');
+    const stopWps=j.waypoints.map((w,i)=>({i,pos:w.waypoint_index})).filter(w=>w.i>=startIdx).sort((a,b)=>a.pos-b.pos);
+    selected=stopWps.map(w=>selected[w.i-startIdx]);
+    renderStops();
+    toast('✅ จัดลำดับเส้นทางให้สั้นที่สุดแล้ว'+(origin?' (เริ่มจากคลัง)':''));
+  }catch(e){toast('จัดลำดับไม่ได้: '+(e.message||e));}
+  btn.disabled=false; btn.textContent=old;
+}
 function updatePlanSummary(){
   const nCrew=$$('#crewPick input:checked').length;
   $('#planSummary').textContent=`รถ ${vehicles.length?'✓':'✗'} · คนขับเลือก ${nCrew} · ร้าน ${selected.length}`;

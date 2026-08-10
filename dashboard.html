@@ -98,6 +98,9 @@
   .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#111827;color:#fff;padding:11px 20px;border-radius:11px;font-size:14px;z-index:3000;opacity:0;transition:.3s;pointer-events:none}
   .toast.show{opacity:1}
   .muted{color:var(--muted)}
+  .live-truck{font-size:22px;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,.45))}
+  .live-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--live);margin-right:5px;animation:pulse 1.4s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
   /* report tables + settings */
   .rtbl{width:100%;border-collapse:collapse;font-size:13px}
   .rtbl th,.rtbl td{padding:8px 10px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
@@ -203,7 +206,7 @@ const SET_KEY='rf_settings';
 function loadSettings(){try{return JSON.parse(localStorage.getItem(SET_KEY))||{};}catch(e){return{};}}
 let SETTINGS=loadSettings();
 let OFF_M=SETTINGS.offM||200, OFF_MIN=SETTINGS.offMin||2;   // เกณฑ์นอกเส้นทาง (ปรับได้ในหน้าตั้งค่า)
-let sb=null,me=null,trips=[],stopsByTrip={},filter='all',map=null,layers=[],histMode=false;
+let sb=null,me=null,trips=[],stopsByTrip={},filter='all',map=null,layers=[],histMode=false,liveLayers=[],liveTimer=null;
 const LETTERS='ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 const LCOL=['#ea580c','#dc2626','#2563eb','#f59e0b','#0f9d58','#9333ea','#0891b2','#db2777'];
 
@@ -269,7 +272,26 @@ async function loadTrips(){
     const{data:sd}=await sb.from('trip_stops').select('*, customers(name,lat,lng,geofence_m)').in('trip_id',ids).order('seq');
     (sd||[]).forEach(s=>{(stopsByTrip[s.trip_id]=stopsByTrip[s.trip_id]||[]).push(s);});
   }
-  renderKpis(); renderTripList(); drawMap();
+  renderKpis(); renderTripList(); drawMap(); refreshLive();
+  if(!liveTimer)liveTimer=setInterval(refreshLive,15000);   // ติดตามสดทุก 15 วิ
+}
+/* ---------- ติดตามสด (ตำแหน่งรถล่าสุด) ---------- */
+async function refreshLive(){
+  if(!map)return;
+  liveLayers.forEach(l=>map.removeLayer(l)); liveLayers=[];
+  const liveIds=trips.filter(t=>t.status==='live').map(t=>t.id);
+  const liveEl=$('#kLive'); if(liveEl&&liveEl.parentElement)liveEl.parentElement.querySelector('.tag').innerHTML=liveIds.length?'<span class="live-dot"></span>Live':'Live';
+  if(!liveIds.length)return;
+  const{data}=await sb.from('gps_pings').select('trip_id,lat,lng,recorded_at,speed_kmh').in('trip_id',liveIds).order('recorded_at',{ascending:false}).limit(600);
+  const latest={}; (data||[]).forEach(p=>{if(!latest[p.trip_id])latest[p.trip_id]=p;});
+  Object.keys(latest).forEach(tid=>{
+    const p=latest[tid], t=trips.find(x=>String(x.id)===String(tid));
+    const ic=L.divIcon({html:'🚚',className:'live-truck',iconSize:[26,26],iconAnchor:[13,13]});
+    const spd=p.speed_kmh!=null?' · '+Math.round(p.speed_kmh)+' กม./ชม.':'';
+    const m=L.marker([p.lat,p.lng],{icon:ic,zIndexOffset:1000}).addTo(map)
+      .bindTooltip('🚚 '+(t?esc(t.trip_code):'')+' · '+fmtTime(p.recorded_at)+spd,{direction:'top'});
+    liveLayers.push(m);
+  });
 }
 
 function tripStats(t){

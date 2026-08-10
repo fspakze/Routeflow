@@ -371,6 +371,7 @@ async function openDetail(id){
   const off=detectOffRoute(planRoad,pings||[]);
   $('#overView').style.display='none';$('#detailView').style.display='block';
   const s=tripStats(t);
+  let codExp=0,codCol=0; if(FLAGS.orders_cod)ss.forEach(x=>{codExp+=+x.cod_amount||0;codCol+=+x.collected_amount||0;});
   const dur=(t.actual_depart&&t.actual_finish)?Math.round((new Date(t.actual_finish)-new Date(t.actual_depart))/60000):null;
   const crew=await loadCrew(id);
   $('#detailView').innerHTML=`
@@ -390,6 +391,7 @@ async function openDetail(id){
       <div class="metric"><div class="l">วิ่งนอกเส้นทาง</div><div class="v" style="color:${off.events.length?'var(--bad)':'var(--ok)'}">${off.events.length} ครั้ง${off.extraKm?' · +'+off.extraKm+' กม.':''}</div></div>
     </div>
     ${off.events.length?`<div class="alertbar" style="font-size:13px">⚠️ <b>ตรวจพบการวิ่งนอกเส้นทาง ${off.events.length} ครั้ง</b> — รวม ${off.totalMin} นาที, ห่างเส้นแผนสูงสุด ${off.maxDist} ม. ${off.events.map(e=>'('+fmtTime(e.start)+'–'+fmtTime(e.end)+')').join(' ')}</div>`:''}
+    ${FLAGS.orders_cod?`<div class="alertbar" style="background:var(--okbg);border-color:#bfe6cf;color:#0f5132;font-size:13px">💰 <b>เก็บเงินปลายทาง (COD)</b> — เก็บได้ ${codCol.toLocaleString()} / ต้องเก็บ ${codExp.toLocaleString()} ฿${codExp>codCol?' · ขาด '+(codExp-codCol).toLocaleString()+' ฿':' ✓ ครบ'}</div>`:''}
     <div class="grid2" style="margin-top:14px">
       <div class="panel"><h3>🗺️ แผนที่ — เส้นแผน vs เส้นจริง</h3><div id="dmap" style="height:460px;border-radius:12px"></div>
         <div class="legend2"><span><i style="background:#0f9d58"></i>เส้นแผน</span><span><i style="background:#2563eb"></i>วิ่งจริง</span><span><i style="background:#dc2626"></i>นอกเส้นทาง</span></div></div>

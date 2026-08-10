@@ -281,16 +281,18 @@ $$('.tabs button').forEach(b=>b.onclick=()=>{
 
 async function loadAll(){
   const today=new Date().toISOString().slice(0,10);
-  const[cRes,vRes,pRes,rpRes,dRes,tRes]=await Promise.all([
+  const[cRes,vRes,pRes,rpRes,dRes,tRes,fRes]=await Promise.all([
     sb.from('customers').select('id,name,code,category,lat,lng').not('lat','is',null).limit(5000),
     sb.from('vehicles').select('*').order('plate_no'),
     sb.from('profiles').select('id,full_name,role,phone,is_active,username').order('role'),
     sb.from('role_permissions').select('*'),
     sb.from('depots').select('*').order('name'),
-    sb.from('trips').select('*').gte('trip_date',today).order('trip_date').order('planned_depart')
+    sb.from('trips').select('*').gte('trip_date',today).order('trip_date').order('planned_depart'),
+    sb.from('app_settings').select('*')
   ]);
   customers=cRes.data||[]; vehicles=vRes.data||[]; crew=pRes.data||[]; depots=dRes.data||[]; allTrips=tRes.data||[];
   perms={}; (rpRes.data||[]).forEach(r=>perms[r.role]=r); myPerm=perms[me.role]||{};
+  FLAGS={}; (fRes.data||[]).forEach(r=>FLAGS[r.key]=r.enabled);
   renderVehSelect(); renderCrewPick(); renderVehTable(); renderCrewTable(); renderPerms(); applyTabGating();
   renderDepotSelect(); renderDepotMgr(); renderTripPick(); buildPlanMap();
 }
@@ -318,8 +320,9 @@ async function loadTripForEdit(id){
   const crewIds=new Set((tc||[]).map(c=>c.user_id));
   $$('#crewPick input').forEach(i=>{i.checked=crewIds.has(i.value);});
   // จุดส่ง (เส้นทาง)
-  const{data:ts}=await sb.from('trip_stops').select('seq, customers(id,name,code,lat,lng,category)').eq('trip_id',id).order('seq');
-  selected=(ts||[]).map(s=>s.customers).filter(Boolean);
+  const cols=FLAGS.orders_cod?'seq,cod_amount,order_note, customers(id,name,code,lat,lng,category)':'seq, customers(id,name,code,lat,lng,category)';
+  const{data:ts}=await sb.from('trip_stops').select(cols).eq('trip_id',id).order('seq');
+  selected=(ts||[]).filter(s=>s.customers).map(s=>Object.assign({},s.customers,{cod:s.cod_amount,ordNote:s.order_note}));
   renderStops();
   $('#saveTrip').textContent='💾 บันทึกการแก้ไข';
   $('#editBadge').innerHTML='กำลังแก้ไข: <b>'+esc(t.trip_code)+'</b> — เปลี่ยนรถ/เส้นทาง/คนขับได้';
@@ -541,10 +544,17 @@ function renderStops(){
   const el=$('#stopList');
   if(!selected.length){el.innerHTML='<div class="muted" style="font-size:13px">ยังไม่เลือกร้าน — คลิกหมุดบนแผนที่</div>';}
   else{
-    el.innerHTML=selected.map((s,i)=>`<div class="stop">
+    el.innerHTML=selected.map((s,i)=>`<div class="stop" style="flex-wrap:wrap">
       <span class="seq">${i+1}</span><span class="nm">${esc(s.name)}${s.code?' · '+esc(s.code):''}</span>
       <span class="mv" data-up="${i}">▲</span><span class="mv" data-dn="${i}">▼</span>
-      <span class="x" data-rm="${i}">✕</span></div>`).join('');
+      <span class="x" data-rm="${i}">✕</span>
+      ${FLAGS.orders_cod?`<div style="flex-basis:100%;display:flex;gap:6px;margin-top:6px">
+        <input class="cod-in" data-i="${i}" type="number" placeholder="COD ฿" value="${s.cod??''}" style="width:110px">
+        <input class="ord-in" data-i="${i}" placeholder="รายการ/เลขบิล" value="${s.ordNote?esc(s.ordNote):''}" style="flex:1">
+      </div>`:''}
+    </div>`).join('');
+    el.querySelectorAll('.cod-in').forEach(inp=>inp.onchange=()=>{selected[+inp.dataset.i].cod=inp.value?+inp.value:null;});
+    el.querySelectorAll('.ord-in').forEach(inp=>inp.onchange=()=>{selected[+inp.dataset.i].ordNote=inp.value||null;});
   }
   $('#stopCount').textContent=selected.length;
   refreshMarkers();
@@ -612,7 +622,10 @@ async function saveTrip(){
     }
     const{error:e2}=await sb.from('trip_crew').insert(crewSel.map(c=>({trip_id:tripId,user_id:c.id,crew_role:c.role})));
     if(e2)throw e2;
-    const{error:e3}=await sb.from('trip_stops').insert(selected.map((s,i)=>({trip_id:tripId,customer_id:s.id,seq:i+1})));
+    const{error:e3}=await sb.from('trip_stops').insert(selected.map((s,i)=>{
+      const o={trip_id:tripId,customer_id:s.id,seq:i+1};
+      if(FLAGS.orders_cod){o.cod_amount=s.cod??null;o.order_note=s.ordNote??null;}
+      return o;}));
     if(e3)throw e3;
     toast((editTripId?'✅ บันทึกการแก้ไข ':'✅ บันทึก trip ')+code+' ('+selected.length+' ร้าน)');
     newTrip(); await loadAll();
@@ -679,7 +692,7 @@ $('#addUser').onclick=async()=>{
 const ROLES=['admin','manager','dc_head','driver','helper','viewer'];
 const ROLE_LABEL={admin:'ผู้ดูแลระบบ',manager:'ผู้จัดการ',dc_head:'หัวหน้า DC',driver:'คนขับ',helper:'ผู้ช่วย',viewer:'ดูอย่างเดียว'};
 const PERMS=[['can_dashboard','แดชบอร์ด'],['can_plan','วางแผน trip'],['can_stores','จัดการร้าน'],['can_vehicles','จัดการรถ'],['can_reports','รายงาน'],['can_staff','จัดการพนักงาน'],['can_driver_app','แอปคนขับ']];
-let perms={}, myPerm={};
+let perms={}, myPerm={}, FLAGS={};
 function renderCrewTable(){
   const el=$('#crewTable');
   if(!crew.length){el.innerHTML='<div class="muted">ยังไม่มีทีมงาน — เพิ่มด้านบน</div>';return;}

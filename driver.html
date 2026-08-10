@@ -115,6 +115,11 @@
         <button class="btn gray sm" data-res="returned" style="flex:1">ตีกลับ</button>
       </div>
       <div id="podReasonWrap" style="display:none;margin-top:10px"><label class="fl">เหตุผล *</label><input id="podReason" placeholder="เช่น ของไม่ครบ / ร้านปฏิเสธรับ"></div>
+      <div id="podCodWrap" style="display:none;margin-top:12px;padding:10px;background:var(--bg,#fff7ed);border-radius:8px">
+        <div style="font-size:14px">💰 ยอดเก็บเงินปลายทาง (COD): <b id="podCodAmt">-</b> ฿</div>
+        <label class="fl" style="margin-top:6px">เก็บเงินได้จริง (฿)</label>
+        <input id="podCollected" type="number" placeholder="0">
+      </div>
       <div style="display:flex;gap:8px;margin-top:14px">
         <button class="btn ok" id="podSave" style="flex:1">บันทึกการส่ง</button>
         <button class="btn gray" id="podCancel">ยกเลิก</button>
@@ -128,7 +133,7 @@
 <script>
 const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
 const LS={url:'rf_sb_url',key:'rf_sb_key'};
-let sb=null,me=null,trips=[],trip=null,stops=[],tMap=null,meMarker=null,stopMarkers={};
+let sb=null,me=null,trips=[],trip=null,stops=[],tMap=null,meMarker=null,stopMarkers={},DFLAGS={};
 let watchId=null,pingTimer=null,lastPos=null,wakeLock=null;
 
 $('#loginBtn').onclick=login;$('#password').addEventListener('keydown',e=>{if(e.key==='Enter')login();});
@@ -160,6 +165,7 @@ async function proceed(){
   me={id:user.id,...(prof||{})};
   $('#me').textContent=prof?prof.full_name:'';
   $('#gate').classList.add('hidden');$('#bar').classList.remove('hidden');$('#main').classList.remove('hidden');
+  try{const{data:fl}=await sb.from('app_settings').select('*');DFLAGS={};(fl||[]).forEach(r=>DFLAGS[r.key]=r.enabled);}catch(e){DFLAGS={};}
   await loadTrips();
 }
 (async function boot(){
@@ -338,6 +344,8 @@ function openPod(id){
   $('#podPhotoName').textContent=''; $('#podThumb').style.display='none';
   $('#podReceiver').value=''; $('#podReason').value=''; $('#podReasonWrap').style.display='none';
   setPodResult('delivered');
+  if(DFLAGS.orders_cod&&s.cod_amount!=null){$('#podCodWrap').style.display='block';$('#podCodAmt').textContent=s.cod_amount;$('#podCollected').value=s.cod_amount;}
+  else{$('#podCodWrap').style.display='none';$('#podCollected').value='';}
   $('#podModal').classList.remove('hidden');
   if(!signPad)signPad=initSignPad(); signPad.clear();
 }
@@ -384,6 +392,7 @@ $('#podSave').onclick=async()=>{
     const upd=(podResult==='returned')?{status:'failed',note:reason}:{status:'delivered',actual_depart:now,note:podResult==='partial'?('ส่งบางส่วน: '+reason):null};
     if(!s.actual_arrive)upd.actual_arrive=now;
     if(s.actual_arrive&&podResult!=='returned')upd.dwell_min=Math.max(0,Math.round((Date.now()-new Date(s.actual_arrive))/60000));
+    if(DFLAGS.orders_cod)upd.collected_amount=$('#podCollected').value?+$('#podCollected').value:null;
     const{error:se}=await sb.from('trip_stops').update(upd).eq('id',id); if(se)throw se;
     Object.assign(s,upd);
     closePod();

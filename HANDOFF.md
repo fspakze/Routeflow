@@ -44,8 +44,8 @@
 | `driver_phase.sql` | ✅ รันแล้ว | policy ให้คนขับแก้ trip ตัวเอง + bucket `proofs` |
 | `username_login.sql` | ✅ รันแล้ว | คอลัมน์ `profiles.username` (login ด้วยไอดีแทนอีเมล) |
 | `roles_permissions.sql` | ✅ รันแล้ว | เพิ่ม role `dc_head` + ตาราง `role_permissions` (เมทริกซ์สิทธิ์ แก้ได้เฉพาะ admin) · **รันแยก 2 สเต็ป** (STEP 1 = ALTER TYPE, STEP 2 = ที่เหลือ) |
-| `depots.sql` | ⏳ ต้องรัน | ตาราง `depots` คลังต้นทาง (เลือกได้ตอนวางแผน) + seed 2 คลัง |
-| `pod.sql` | ⏳ ต้องรัน | คอลัมน์หลักฐานส่ง (received_by/signature/result/reason) ใน `delivery_proofs` |
+| `depots.sql` | ✅ รันแล้ว | ตาราง `depots` คลังต้นทาง (เลือกได้ตอนวางแผน) + seed 2 คลัง |
+| `pod.sql` | ✅ รันแล้ว | คอลัมน์หลักฐานส่ง (received_by/signature/result/reason) ใน `delivery_proofs` |
 
 ## 5. Edge Functions
 | ฟังก์ชัน | สถานะ | ใช้ทำ |

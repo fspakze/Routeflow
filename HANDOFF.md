@@ -46,6 +46,8 @@
 | `roles_permissions.sql` | ✅ รันแล้ว | เพิ่ม role `dc_head` + ตาราง `role_permissions` (เมทริกซ์สิทธิ์ แก้ได้เฉพาะ admin) · **รันแยก 2 สเต็ป** (STEP 1 = ALTER TYPE, STEP 2 = ที่เหลือ) |
 | `depots.sql` | ✅ รันแล้ว | ตาราง `depots` คลังต้นทาง (เลือกได้ตอนวางแผน) + seed 2 คลัง |
 | `pod.sql` | ✅ รันแล้ว | คอลัมน์หลักฐานส่ง (received_by/signature/result/reason) ใน `delivery_proofs` |
+| `return_depot.sql` | ⏳ ต้องรัน | คลังกลับหลังส่งครบ (`trips.return_name/return_lat/return_lng/returned_at`) |
+| `features.sql` | ⏳ ต้องรัน | `app_settings` เปิด/ปิดฟีเจอร์ + คอลัมน์ COD (`trip_stops.cod_amount/collected_amount/order_note`) |
 
 ## 5. Edge Functions
 | ฟังก์ชัน | สถานะ | ใช้ทำ |
@@ -83,6 +85,12 @@ git push
 - **GPS ต้อง HTTPS** — ใช้บนมือถือได้เพราะ Pages เป็น https (localhost ก็ได้) · iOS จำกัด background GPS แนะนำ Android เปิดจอค้าง
 - **ลบพนักงานที่อยู่ใน trip_crew ไม่ได้** (FK) → ใช้ปุ่ม "ปิดใช้งาน" แทน
 - **เส้นแผน = ถนนจริง (OSRM):** dashboard คำนวณเส้นทางตามถนนจริงผ่าน OSRM (`router.project-osrm.org` ฟรี ไม่ต้องมี key) ใช้ทั้งวาดแผนที่ + ตรวจนอกเส้นทาง (>200ม./2นาที เทียบถนนจริง) · fallback เป็นเส้นตรงถ้าเรียก OSRM ไม่ได้ · OSRM public server เหมาะ dev — ถ้า production หนักควร self-host
+
+## 9.5 ระบบเปิด/ปิดฟีเจอร์ (feature flags)
+ตาราง `app_settings` (key/enabled) — **Admin เปิด/ปิดที่ dashboard → ตั้งค่า → "ฟีเจอร์ระบบ"** · ทุกหน้าโหลด flags ตอน login แล้ว gate ฟีเจอร์
+- `pod_details` (ปิด) — แสดงผู้รับ/ลายเซ็น/ตีกลับ/ดูรูป ใน timeline แดชบอร์ด
+- `orders_cod` (ปิด) — กรอก COD+บิลต่อร้าน (admin) · คนขับกรอกเก็บเงินได้จริง (POD) · สรุป COD (dashboard)
+> ปิดอยู่ = ไม่กระทบระบบเดิม · ต้องรัน `features.sql` ก่อนถึงเปิดได้
 
 ## 10. งานที่เหลือ (Todo)
 > ✅ SQL migration ครบ (customers_profile + driver_phase) · Edge Functions ครบ (create + delete) — **ระบบหลักพร้อมใช้จริงครบวงจร**

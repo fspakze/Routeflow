@@ -58,6 +58,7 @@
     <h1>🚚 RouteFlow คนขับ</h1><p>เข้าสู่ระบบด้วยบัญชีที่ผู้จัดการสร้างให้</p>
     <label class="fl">ไอดี หรือ อีเมล</label><input id="email" type="text" autocapitalize="off" spellcheck="false" autocomplete="username">
     <label class="fl">รหัสผ่าน</label><input id="password" type="password" autocomplete="current-password">
+    <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);margin-top:6px"><input type="checkbox" id="showPw" style="width:auto"> แสดงรหัสผ่าน</label>
     <button class="btn" id="loginBtn" style="margin-top:14px">เข้าสู่ระบบ</button>
     <div class="err" id="gerr"></div>
   </div></div>
@@ -90,6 +91,7 @@ let sb=null,me=null,trips=[],trip=null,stops=[],tMap=null,meMarker=null,stopMark
 let watchId=null,pingTimer=null,lastPos=null,wakeLock=null;
 
 $('#loginBtn').onclick=login;$('#password').addEventListener('keydown',e=>{if(e.key==='Enter')login();});
+$('#showPw').onchange=e=>{$('#password').type=e.target.checked?'text':'password';};
 $('#logoutBtn').onclick=async()=>{stopTracking();await sb.auth.signOut();location.reload();};
 
 const RF_DOMAIN='routeflow.local';

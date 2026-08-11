@@ -3,6 +3,12 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="manifest" href="manifest.webmanifest" />
+<meta name="theme-color" content="#ea580c" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-title" content="RouteFlow" />
+<link rel="apple-touch-icon" href="icon.svg" />
+<link rel="icon" href="icon.svg" />
 <title>RouteFlow — ระบบจัดการเส้นทางส่งของ</title>
 <style>
   :root{--bg:#fff7ed;--card:#fff;--line:#fee2c7;--ink:#28211c;--muted:#8a7f76;--brand:#ea580c;--brand2:#f97316}
@@ -22,6 +28,7 @@
   .card b{font-size:16px}.card span{display:block;color:var(--muted);font-size:13px;margin-top:3px}
   .foot{text-align:center;color:var(--muted);font-size:12px;margin-top:24px}
   @media(max-width:600px){.grid{grid-template-columns:1fr}}
+  @media(max-width:700px){.btn,a.card,input,select,textarea{min-height:44px}}
 </style>
 </head>
 <body>
@@ -36,5 +43,6 @@
     </div>
     <div class="foot">© Friendship Group · RouteFlow v1.0 · OpenStreetMap + Supabase</div>
   </div>
+<script>if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js').catch(function(){});</script>
 </body>
 </html>

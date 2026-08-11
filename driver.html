@@ -3,6 +3,12 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<link rel="manifest" href="manifest-driver.webmanifest" />
+<meta name="theme-color" content="#ea580c" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-title" content="RF คนขับ" />
+<link rel="apple-touch-icon" href="icon.svg" />
+<link rel="icon" href="icon.svg" />
 <meta name="theme-color" content="#ea580c" />
 <title>RouteFlow — คนขับ</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -50,6 +56,7 @@
   .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#111827;color:#fff;padding:12px 20px;border-radius:12px;font-size:15px;z-index:3000;opacity:0;transition:.3s;pointer-events:none;max-width:90%;text-align:center}
   .toast.show{opacity:1}
   .sumrow{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3e8dd;font-size:14px}
+  .btn{min-height:46px}input,select{min-height:46px}.btn.sm,.btn.gray.sm{min-height:38px}
 </style>
 </head>
 <body>
@@ -458,5 +465,6 @@ function statusTh(s){return{planned:'วางแผน',live:'กำลัง�
 function esc(s){return(s==null?'':String(s)).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
 let tT;function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('show');clearTimeout(tT);tT=setTimeout(()=>t.classList.remove('show'),2800);}
 </script>
+<script>if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js').catch(function(){});</script>
 </body>
 </html>

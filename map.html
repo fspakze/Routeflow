@@ -3,6 +3,12 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+<link rel="manifest" href="manifest.webmanifest" />
+<meta name="theme-color" content="#ea580c" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-title" content="RouteFlow" />
+<link rel="apple-touch-icon" href="icon.svg" />
+<link rel="icon" href="icon.svg" />
 <title>RouteFlow — แผนที่ร้านค้า</title>
 
 <!-- Leaflet -->
@@ -75,6 +81,7 @@
   .pin{color:var(--muted);font-size:12px}
   .popup-btn{display:inline-block;margin-top:8px;padding:6px 10px;background:var(--brand);color:#fff;border-radius:8px;font-size:12px;text-decoration:none;font-weight:600}
   @media(max-width:600px){ .legend{max-height:34vh;font-size:11px} .styleEditor{top:auto;bottom:10px;right:10px;left:10px;width:auto} }
+  @media(max-width:700px){.btn,input,select{min-height:44px}.btn.sm{min-height:36px}}
 </style>
 </head>
 <body>
@@ -352,5 +359,6 @@ async function logout(){ try{ await sb.auth.signOut(); }catch(e){} location.relo
 function escapeHtml(s){ return (s==null?'':String(s)).replace(/[&<>"']/g,
   m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
 </script>
+<script>if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js').catch(function(){});</script>
 </body>
 </html>

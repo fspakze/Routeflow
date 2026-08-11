@@ -10,6 +10,7 @@
 
 **Stack:** Supabase (Postgres + RLS + Auth + Storage + Edge Functions) + static HTML + Leaflet.js
 **ไม่มี build step** — เว็บเป็นไฟล์ HTML ล้วน โฮสต์บน GitHub Pages
+**PWA ติดตั้งได้** (responsive desktop+mobile) — `manifest.webmanifest` (hub) + `manifest-driver.webmanifest` (คนขับ) + `sw.js` (service worker) + `icon.svg` · ทุกหน้ากด "เพิ่มลงหน้าจอโฮม/ติดตั้ง" ได้
 
 ## 2. ลิงก์สำคัญ
 | อะไร | ที่ไหน |
@@ -46,8 +47,8 @@
 | `roles_permissions.sql` | ✅ รันแล้ว | เพิ่ม role `dc_head` + ตาราง `role_permissions` (เมทริกซ์สิทธิ์ แก้ได้เฉพาะ admin) · **รันแยก 2 สเต็ป** (STEP 1 = ALTER TYPE, STEP 2 = ที่เหลือ) |
 | `depots.sql` | ✅ รันแล้ว | ตาราง `depots` คลังต้นทาง (เลือกได้ตอนวางแผน) + seed 2 คลัง |
 | `pod.sql` | ✅ รันแล้ว | คอลัมน์หลักฐานส่ง (received_by/signature/result/reason) ใน `delivery_proofs` |
-| `return_depot.sql` | ⏳ ต้องรัน | คลังกลับหลังส่งครบ (`trips.return_name/return_lat/return_lng/returned_at`) |
-| `features.sql` | ⏳ ต้องรัน | `app_settings` เปิด/ปิดฟีเจอร์ + คอลัมน์ COD (`trip_stops.cod_amount/collected_amount/order_note`) |
+| `return_depot.sql` | ✅ รันแล้ว | คลังกลับหลังส่งครบ (`trips.return_name/return_lat/return_lng/returned_at`) |
+| `features.sql` | ✅ รันแล้ว | `app_settings` เปิด/ปิดฟีเจอร์ + คอลัมน์ COD (`trip_stops.cod_amount/collected_amount/order_note`) |
 
 ## 5. Edge Functions
 | ฟังก์ชัน | สถานะ | ใช้ทำ |
@@ -100,8 +101,10 @@ git push
 
 ## 11. ไฟล์ในโปรเจกต์
 ```
-index/dashboard/driver/admin/stores/map .html   ← หน้าเว็บ
+index/dashboard/driver/admin/stores/map .html   ← หน้าเว็บ (responsive + PWA)
 config.js                                        ← Supabase config
+manifest.webmanifest / manifest-driver.webmanifest ← PWA manifest (hub / คนขับ)
+sw.js / icon.svg                                 ← service worker + ไอคอนแอป
 schema.postgres.sql                              ← ตาราง+RLS (รันแล้ว)
 customers_import.sql                             ← 401 ร้าน (รันแล้ว, gitignored)
 customers_profile.sql / driver_phase.sql         ← migration (รันแล้ว)

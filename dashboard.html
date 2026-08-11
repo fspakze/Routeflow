@@ -3,6 +3,12 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="manifest" href="manifest.webmanifest" />
+<meta name="theme-color" content="#ea580c" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-title" content="RouteFlow" />
+<link rel="apple-touch-icon" href="icon.svg" />
+<link rel="icon" href="icon.svg" />
 <title>RouteFlow — แดชบอร์ดผู้จัดการ</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <style>
@@ -123,6 +129,7 @@
     .metrics{grid-template-columns:repeat(2,1fr)}
   }
   @media(max-width:480px){.kpis{grid-template-columns:1fr 1fr}.kpi .big{font-size:24px}}
+  @media(max-width:700px){.btn,input,select,textarea{min-height:44px}.btn.sm{min-height:38px}.nav a{min-height:44px}.iconbtn{width:44px;height:44px}}
   @media print{aside,.topbar .search,.topbar .iconbtn,.filters,#backBtn{display:none!important}#app{grid-template-columns:1fr}}
 </style>
 </head>
@@ -704,5 +711,6 @@ function fmtTime(iso){try{return new Date(iso).toLocaleTimeString('th-TH',{hour:
 function esc(s){return(s==null?'':String(s)).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
 let tT;function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('show');clearTimeout(tT);tT=setTimeout(()=>t.classList.remove('show'),2600);}
 </script>
+<script>if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js').catch(function(){});</script>
 </body>
 </html>

@@ -59,6 +59,13 @@
   .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#111827;color:#fff;padding:10px 18px;border-radius:10px;font-size:14px;z-index:3000;opacity:0;transition:.3s;pointer-events:none}
   .toast.show{opacity:1}
   @media(max-width:820px){#planWrap{grid-template-columns:1fr}#planMap{height:340px}}
+  #vehTable,#crewTable,#permsBody{overflow-x:auto}
+  @media(max-width:700px){
+    .tabs{overflow-x:auto;flex-wrap:nowrap;-webkit-overflow-scrolling:touch}
+    .tabs button{white-space:nowrap;flex:none}
+    #vehTable table,#crewTable table{min-width:560px}
+    header{gap:8px}
+  }
   /* marker + legend + style editor (เหมือน map.html) */
   .rf-mk{background:none;border:none}
   .rf-mk svg{display:block;filter:drop-shadow(0 1px 1px rgba(0,0,0,.35))}

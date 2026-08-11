@@ -77,8 +77,17 @@
   .rf-mk{background:none;border:none}
   .rf-mk svg{display:block;filter:drop-shadow(0 1px 1px rgba(0,0,0,.35))}
   .rf-sel{background:none;border:none}
-  .legend{background:rgba(255,255,255,.96);border:1px solid var(--line);border-radius:12px;padding:8px 10px;font-size:12px;line-height:1.6;max-height:44vh;overflow:auto;box-shadow:0 4px 16px rgba(0,0,0,.1)}
+  .legend{background:rgba(255,255,255,.96);border:1px solid var(--line);border-radius:12px;padding:8px 10px;font-size:12px;line-height:1.6;max-height:44vh;overflow:auto;box-shadow:0 4px 16px rgba(0,0,0,.1);max-width:64vw}
   .legend h4{margin:0 0 6px;font-size:11px;color:var(--muted);font-weight:600}
+  .legend h4.leg-h{cursor:pointer;display:flex;align-items:center;gap:6px;margin:0}
+  .legend .leg-sub{margin-left:auto;font-weight:400;color:var(--muted);font-size:10px}
+  .legend.collapsed{max-height:none;padding:6px 10px}
+  .legend.collapsed .lrow{display:none}
+  /* fullscreen map toggle (มือถือปักหมุด/เลือกร้านสะดวก) */
+  .map-fs{position:fixed!important;inset:0!important;width:100%!important;height:100%!important;z-index:4000;border-radius:0!important;margin:0!important}
+  .map-fs-close{position:fixed;top:12px;left:12px;z-index:4001;background:#111827;color:#fff;border:0;border-radius:10px;padding:10px 16px;font-size:15px;font-weight:700;box-shadow:0 4px 14px rgba(0,0,0,.3);cursor:pointer}
+  .map-fs-btn{position:absolute;top:8px;left:8px;z-index:500;background:#fff;border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:12px;font-weight:600;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.12)}
+  .map-hold{position:relative}
   .legend .lrow{display:flex;align-items:center;gap:6px;user-select:none}
   .legend .lrow.off{opacity:.35}
   .legend .sw{width:18px;height:18px;flex:none;display:flex;align-items:center;justify-content:center;cursor:pointer}
@@ -155,7 +164,8 @@
       <div class="card">
         <h3>2. เลือกร้านที่จะไปส่ง — คลิกหมุดบนแผนที่เพื่อเพิ่ม/เอาออก</h3>
         <div id="planWrap">
-          <div id="planMap"></div>
+          <div class="map-hold"><div id="planMap"></div>
+            <button type="button" class="map-fs-btn" id="planFsBtn">⛶ เต็มจอ</button></div>
           <div>
             <div class="row" style="margin-bottom:8px">
               <b style="flex:1">ลำดับส่ง (<span id="stopCount">0</span> ร้าน)</b>
@@ -481,12 +491,20 @@ function buildPlanMap(){
 let _pcounts={};
 function buildPlanLegend(){
   const ctrl=L.control({position:'topright'});
-  ctrl.onAdd=function(){const d=L.DomUtil.create('div','legend');d.id='planLegend';renderPlanLegend(d);L.DomEvent.disableClickPropagation(d);return d;};
+  ctrl.onAdd=function(){const d=L.DomUtil.create('div','legend');d.id='planLegend';
+    if(window.innerWidth<=820)d.classList.add('collapsed');
+    renderPlanLegend(d);L.DomEvent.disableClickPropagation(d);L.DomEvent.disableScrollPropagation(d);return d;};
   ctrl.addTo(planMap);
 }
 function renderPlanLegend(d){
   d=d||document.getElementById('planLegend'); if(!d)return;
-  d.innerHTML='<h4>หมวด (คลิกชื่อ=ซ่อน · ⚙=ปรับสไตล์)</h4>';
+  const collapsed=d.classList.contains('collapsed');
+  d.innerHTML='';
+  const h=document.createElement('h4'); h.className='leg-h';
+  h.innerHTML=`<span>${collapsed?'▸':'▾'}</span><span>หมวด</span>`
+    +`<span class="leg-sub">${collapsed?_pcats.length+' หมวด · แตะเปิด':'คลิกชื่อ=ซ่อน · ⚙=สไตล์'}</span>`;
+  h.addEventListener('click',()=>{d.classList.toggle('collapsed');renderPlanLegend(d);});
+  d.appendChild(h);
   _pcats.forEach(c=>{
     const st=styleOf[c],row=document.createElement('div');
     row.className='lrow'+(hiddenCat.has(c)?' off':'');
@@ -579,6 +597,25 @@ function renderStops(){
 }
 $('#clearStops').onclick=()=>{selected=[];renderStops();};
 $('#optStops').onclick=optimizeStops;
+
+/* เต็มจอแผนที่ — มือถือเลือกร้านสะดวก ไม่ชนกับการเลื่อนหน้า */
+let _fsClose=null;
+function toggleMapFS(mapObj,elId,btnId){
+  const el=document.getElementById(elId); if(!el||!mapObj)return;
+  const on=el.classList.toggle('map-fs');
+  if(on){
+    const b=document.createElement('button');
+    b.className='map-fs-close'; b.textContent='✕ ปิดแผนที่'; b.id='mapFsClose';
+    b.onclick=()=>toggleMapFS(mapObj,elId,btnId);
+    document.body.appendChild(b); _fsClose=b;
+    if(btnId){const pb=document.getElementById(btnId);if(pb)pb.style.display='none';}
+  }else{
+    if(_fsClose){_fsClose.remove();_fsClose=null;}
+    if(btnId){const pb=document.getElementById(btnId);if(pb)pb.style.display='';}
+  }
+  setTimeout(()=>mapObj.invalidateSize(),200);
+}
+$('#planFsBtn').onclick=()=>toggleMapFS(planMap,'planMap','planFsBtn');
 async function optimizeStops(){
   if(selected.length<2){toast('ต้องมีอย่างน้อย 2 ร้าน');return;}
   const ll=$('#tOriginLL').value.trim(); let origin=null;

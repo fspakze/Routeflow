@@ -50,8 +50,13 @@
   #map{flex:1;min-height:0}
 
   /* ---- Legend ---- */
-  .legend{background:rgba(255,255,255,.96);border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:12px;line-height:1.7;max-height:46vh;overflow:auto;box-shadow:0 4px 16px rgba(0,0,0,.08)}
+  .legend{background:rgba(255,255,255,.96);border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:12px;line-height:1.7;max-height:46vh;overflow:auto;box-shadow:0 4px 16px rgba(0,0,0,.08);max-width:64vw}
   .legend h4{margin:0 0 6px;font-size:12px;color:var(--muted);font-weight:600}
+  .legend h4.leg-h{cursor:pointer;display:flex;align-items:center;gap:6px;margin:0}
+  .legend .leg-sub{margin-left:auto;font-weight:400;color:var(--muted);font-size:10px}
+  .legend.collapsed{max-height:none;padding:8px 12px}
+  .legend.collapsed .row{display:none}
+  .legend.collapsed h4.leg-h{margin:0}
   .legend .row{display:flex;align-items:center;gap:7px;user-select:none}
   .legend .row.off{opacity:.35}
   .legend .sw{width:18px;height:18px;flex:none;display:flex;align-items:center;justify-content:center;cursor:pointer}
@@ -220,15 +225,23 @@ function buildLegend(cats,counts){
   const ctrl=L.control({position:'topright'});
   ctrl.onAdd=function(){
     const d=L.DomUtil.create('div','legend'); d.id='legendBox';
+    if(window.innerWidth<=700) d.classList.add('collapsed');
     renderLegend(d);
     L.DomEvent.disableClickPropagation(d);
+    L.DomEvent.disableScrollPropagation(d);
     return d;
   };
   ctrl.addTo(map);
 }
 function renderLegend(d){
   d=d||document.getElementById('legendBox'); if(!d) return;
-  d.innerHTML='<h4>หมวดร้าน (คลิกชื่อ=ซ่อน/แสดง · ⚙=ปรับสไตล์)</h4>';
+  const collapsed=d.classList.contains('collapsed');
+  d.innerHTML='';
+  const h=document.createElement('h4'); h.className='leg-h';
+  h.innerHTML=`<span>${collapsed?'▸':'▾'}</span><span>หมวดร้าน</span>`
+    +`<span class="leg-sub">${collapsed?_legendCats.length+' หมวด · แตะเปิด':'คลิกชื่อ=ซ่อน · ⚙=สไตล์'}</span>`;
+  h.addEventListener('click',()=>{d.classList.toggle('collapsed');renderLegend(d);});
+  d.appendChild(h);
   _legendCats.forEach(c=>{
     const st=styleOf[c];
     const row=document.createElement('div');

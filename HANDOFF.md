@@ -11,6 +11,7 @@
 **Stack:** Supabase (Postgres + RLS + Auth + Storage + Edge Functions) + static HTML + Leaflet.js
 **ไม่มี build step** — เว็บเป็นไฟล์ HTML ล้วน โฮสต์บน GitHub Pages
 **PWA ติดตั้งได้** (responsive desktop+mobile) — `manifest.webmanifest` (hub) + `manifest-driver.webmanifest` (คนขับ) + `sw.js` (service worker) + `icon.svg` · ทุกหน้ากด "เพิ่มลงหน้าจอโฮม/ติดตั้ง" ได้
+**แผนที่บนมือถือ:** legend หมวดร้าน **ย่อได้** (มือถือย่อไว้ก่อน แตะหัวข้อเพื่อกาง — เลิกบังหมุด) · ปุ่ม **⛶ เต็มจอ** ที่ planMap (admin) และ pickMap (stores) เปิดแผนที่เต็มจอปักหมุด/เลือกร้านได้ไม่ชนกับการเลื่อนหน้า · หน้า stores มีปุ่ม "📌 ใช้ตำแหน่งปัจจุบัน" + แสดงพิกัดสดด้านบนแผนที่
 
 ## 2. ลิงก์สำคัญ
 | อะไร | ที่ไหน |

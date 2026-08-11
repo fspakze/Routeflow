@@ -162,7 +162,11 @@
       </div>
 
       <div class="card">
-        <h3>2. เลือกร้านที่จะไปส่ง — คลิกหมุดบนแผนที่เพื่อเพิ่ม/เอาออก</h3>
+        <h3>2. เลือกร้านที่จะไปส่ง — คลิกหมุดบนแผนที่ หรือค้นหาด้านล่าง</h3>
+        <div class="row" style="margin-bottom:10px">
+          <input id="stopSearch" placeholder="🔎 ค้นหาร้านเพื่อเพิ่ม (ชื่อ / รหัส / เบอร์โทร)" style="flex:1;min-width:200px">
+        </div>
+        <div id="stopSearchResults" style="margin-bottom:10px"></div>
         <div id="planWrap">
           <div class="map-hold"><div id="planMap"></div>
             <button type="button" class="map-fs-btn" id="planFsBtn">⛶ เต็มจอ</button></div>
@@ -292,8 +296,12 @@ async function proceed(){
 $('#logoutBtn').onclick=async()=>{await sb.auth.signOut();location.reload();};
 (async function boot(){
   if(!(window.RF_CONFIG&&window.supabase))return;
+  // เคยล็อกอินไว้ → ซ่อนหน้า login ทันที กันจอ login แว็บขึ้นมาก่อนตรวจ session
+  let had=false; try{had=Object.keys(localStorage).some(k=>k.indexOf('sb-')===0&&k.indexOf('-auth-token')>0);}catch(e){}
+  if(had){const g=$('#gate');if(g)g.style.display='none';}
   sb=sb||supabase.createClient(RF_CONFIG.url,RF_CONFIG.anonKey);
-  try{const{data:{session}}=await sb.auth.getSession();if(session)await proceed();}catch(e){}
+  try{const{data:{session}}=await sb.auth.getSession();if(session){await proceed();return;}}catch(e){}
+  const g=$('#gate');if(g)g.style.display='';   // ไม่มี session/หมดอายุ → โชว์ login กลับมา
 })();
 
 // tabs
@@ -306,7 +314,7 @@ $$('.tabs button').forEach(b=>b.onclick=()=>{
 async function loadAll(){
   const today=new Date().toISOString().slice(0,10);
   const[cRes,vRes,pRes,rpRes,dRes,tRes,fRes]=await Promise.all([
-    sb.from('customers').select('id,name,code,category,lat,lng').not('lat','is',null).limit(5000),
+    sb.from('customers').select('id,name,code,category,phone,lat,lng').not('lat','is',null).limit(5000),
     sb.from('vehicles').select('*').order('plate_no'),
     sb.from('profiles').select('id,full_name,role,phone,is_active,username').order('role'),
     sb.from('role_permissions').select('*'),
@@ -597,6 +605,31 @@ function renderStops(){
 }
 $('#clearStops').onclick=()=>{selected=[];renderStops();};
 $('#optStops').onclick=optimizeStops;
+
+/* ค้นหาร้านเพื่อเพิ่มลงเส้นทาง (ชื่อ/รหัส/เบอร์โทร) — เผื่อร้านอยู่ไกล/หาบนแผนที่ยาก */
+function renderStopSearch(){
+  const box=$('#stopSearchResults'); if(!box)return;
+  const q=$('#stopSearch').value.trim().toLowerCase();
+  if(!q){box.innerHTML='';return;}
+  const digits=q.replace(/\D/g,'');
+  const res=customers.filter(c=>{
+    const nm=(c.name||'').toLowerCase(), cd=(c.code||'').toLowerCase(), ph=(c.phone||'');
+    return nm.includes(q)||cd.includes(q)||(digits.length>=3&&ph.replace(/\D/g,'').includes(digits));
+  }).slice(0,15);
+  if(!res.length){box.innerHTML='<div class="muted" style="font-size:13px">ไม่พบร้าน</div>';return;}
+  box.innerHTML=res.map(c=>{
+    const on=selected.some(s=>s.id===c.id);
+    return `<div class="stop" data-add="${c.id}" style="cursor:pointer">
+      <span class="seq" style="background:${on?'var(--ok)':'var(--muted)'}">${on?'✓':'+'}</span>
+      <span class="nm">${esc(c.name)}${c.code?' · '+esc(c.code):''}${c.phone?' · 📞 '+esc(c.phone):''}</span>
+    </div>`;}).join('');
+  box.querySelectorAll('[data-add]').forEach(el=>el.onclick=()=>{
+    const c=customers.find(x=>String(x.id)===el.dataset.add); if(!c)return;
+    toggleStop(c); renderStopSearch();
+    const m=markerById[c.id]; if(m&&planMap)planMap.panTo([c.lat,c.lng]);
+  });
+}
+$('#stopSearch').addEventListener('input',renderStopSearch);
 
 /* เต็มจอแผนที่ — มือถือเลือกร้านสะดวก ไม่ชนกับการเลื่อนหน้า */
 let _fsClose=null;

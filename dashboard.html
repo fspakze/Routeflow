@@ -259,8 +259,11 @@ async function proceed(){
 async function loadFlags(){try{const{data}=await sb.from('app_settings').select('*');FLAGS={};(data||[]).forEach(r=>FLAGS[r.key]=r.enabled);}catch(e){FLAGS={};}}
 (async function boot(){
   if(!(window.RF_CONFIG&&window.supabase))return;
+  let had=false; try{had=Object.keys(localStorage).some(k=>k.indexOf('sb-')===0&&k.indexOf('-auth-token')>0);}catch(e){}
+  if(had){const g=document.getElementById('gate');if(g)g.style.display='none';}
   sb=sb||supabase.createClient(RF_CONFIG.url,RF_CONFIG.anonKey);
-  try{const{data:{session}}=await sb.auth.getSession();if(session)await proceed();}catch(e){}
+  try{const{data:{session}}=await sb.auth.getSession();if(session){await proceed();return;}}catch(e){}
+  const g=document.getElementById('gate');if(g)g.style.display='';
 })();
 
 // nav

@@ -113,6 +113,7 @@
     <span class="stat">ร้านทั้งหมด <b id="total">–</b></span>
     <span class="stat">แสดง <b id="shown">–</b></span>
     <input type="search" id="q" placeholder="ค้นหาชื่อ / รหัส FS- / เบอร์โทร..." />
+    <button class="btn" id="modeBtn" title="สลับรวมร้าน/แสดงจุดจริง">⚫ ไม่รวมร้าน</button>
     <button class="btn" id="fitBtn">ดูทั้งหมด</button>
     <button class="btn" id="logoutBtn">ออกจากระบบ</button>
   </header>
@@ -133,6 +134,7 @@ const PALETTE = ['#0f9d58','#0288d1','#f57c00','#9c27b0','#d81b60','#00897b',
                  '#8d6e63','#e53935','#1e88e5','#fb8c00'];
 
 let sb=null, allRows=[], cluster=null, map=null, colorOf={}, groupLayers={}, hidden=new Set();
+let flatLayer=null, flatByCat={}, clusterMode=(localStorage.getItem('rf_map_mode')!=='flat');
 let styleOf={}, _legendCats=[], _legendCounts={};
 const STYLE_LS='rf_marker_styles';
 const SHAPES=['circle','square','triangle','diamond','star','house','pin'];
@@ -187,26 +189,42 @@ function buildMap(){
   loadStyles(cats);
 
   cluster = L.markerClusterGroup({ maxClusterRadius:45, spiderfyOnMaxZoom:true });
-  cats.forEach(c=> groupLayers[c]=[]);
+  flatLayer = L.layerGroup();
+  cats.forEach(c=>{ groupLayers[c]=[]; flatByCat[c]=[]; });
 
   allRows.forEach(r=>{
     const cat=r.category||'(ไม่ระบุ)';
     const m=L.marker([r.lat,r.lng],{icon:makeIcon(styleOf[cat])});
-    m._cat=cat; m._row=r;
-    m.bindPopup(popupHtml(r));
-    groupLayers[cat].push(m);
-    cluster.addLayer(m);
+    m._cat=cat; m._row=r; m.bindPopup(popupHtml(r));
+    groupLayers[cat].push(m); cluster.addLayer(m);
+    // จุดจริง (ไม่รวม) — ใช้ circleMarker วาดบน canvas เร็วแม้หลายพันจุด
+    const dot=L.circleMarker([r.lat,r.lng],dotStyle(styleOf[cat].color));
+    dot._cat=cat; dot._row=r; dot.bindPopup(popupHtml(r));
+    flatByCat[cat].push(dot); flatLayer.addLayer(dot);
   });
-  map.addLayer(cluster);
+  map.addLayer(activeLayer());
+  updateModeBtn();
 
   buildLegend(cats,counts);
   $('#total').textContent = allRows.length;
-  updateShown();
+  applyFilter();
   fitMain();
 
   $('#q').addEventListener('input', applyFilter);
   $('#fitBtn').addEventListener('click', fitAll);
+  $('#modeBtn').addEventListener('click', ()=>setMode(!clusterMode));
   $('#logoutBtn').addEventListener('click', logout);
+}
+function dotStyle(color){ return {radius:5, color:'#fff', weight:1, fillColor:color, fillOpacity:.95}; }
+function activeLayer(){ return clusterMode?cluster:flatLayer; }
+function activeMarkers(cat){ return clusterMode?(groupLayers[cat]||[]):(flatByCat[cat]||[]); }
+function updateModeBtn(){ const b=$('#modeBtn'); if(b)b.textContent=clusterMode?'⚫ ไม่รวมร้าน':'🔵 รวมเป็นจำนวน'; }
+function setMode(on){
+  if(clusterMode===on)return;
+  map.removeLayer(activeLayer());
+  clusterMode=on; localStorage.setItem('rf_map_mode', on?'cluster':'flat');
+  map.addLayer(activeLayer());
+  updateModeBtn(); applyFilter();
 }
 
 function popupHtml(r){
@@ -257,8 +275,7 @@ function renderLegend(d){
 }
 
 function toggleCat(cat){
-  if(hidden.has(cat)){ hidden.delete(cat); groupLayers[cat].forEach(m=>cluster.addLayer(m)); }
-  else { hidden.add(cat); groupLayers[cat].forEach(m=>cluster.removeLayer(m)); }
+  if(hidden.has(cat)) hidden.delete(cat); else hidden.add(cat);
   renderLegend(); applyFilter();
 }
 
@@ -293,6 +310,7 @@ function makeIcon(st){
 function applyCatStyle(cat){
   const ic=styleOf[cat]; colorOf[cat]=ic.color;
   groupLayers[cat].forEach(m=>m.setIcon(makeIcon(ic)));
+  (flatByCat[cat]||[]).forEach(d=>d.setStyle({fillColor:ic.color}));
   saveStyles(); renderLegend();
 }
 function openStyleEditor(cat){
@@ -327,22 +345,25 @@ function closeStyleEditor(){ const e=document.getElementById('styleEditor'); if(
 
 function applyFilter(){
   const q=$('#q').value.trim().toLowerCase();
+  const digits=q.replace(/\D/g,'');
+  const lay=activeLayer();
   Object.keys(groupLayers).forEach(cat=>{
-    groupLayers[cat].forEach(m=>{
+    activeMarkers(cat).forEach(m=>{
       const r=m._row;
       const match = !q || (r.name||'').toLowerCase().includes(q) || (r.code||'').toLowerCase().includes(q)
-        || (r.address||'').toLowerCase().includes(q) || (r.phone||'').toLowerCase().includes(q);
+        || (r.address||'').toLowerCase().includes(q) || (digits.length>=3 && (r.phone||'').replace(/\D/g,'').includes(digits));
       const visible = match && !hidden.has(cat);
-      const on = cluster.hasLayer(m);
-      if(visible && !on) cluster.addLayer(m);
-      if(!visible && on) cluster.removeLayer(m);
+      const on = lay.hasLayer(m);
+      if(visible && !on) lay.addLayer(m);
+      if(!visible && on) lay.removeLayer(m);
     });
   });
   updateShown();
 }
 
 function updateShown(){
-  let n=0; Object.keys(groupLayers).forEach(cat=>groupLayers[cat].forEach(m=>{ if(cluster.hasLayer(m)) n++; }));
+  let n=0; const lay=activeLayer();
+  Object.keys(groupLayers).forEach(cat=>activeMarkers(cat).forEach(m=>{ if(lay.hasLayer(m)) n++; }));
   $('#shown').textContent=n;
 }
 
@@ -365,8 +386,11 @@ async function logout(){ try{ await sb.auth.signOut(); }catch(e){} location.relo
 // จำ session ข้ามหน้า — ถ้า login ไว้แล้วไม่ต้องกรอกใหม่
 (async function boot(){
   if(!(window.RF_CONFIG&&window.supabase))return;
+  let had=false; try{had=Object.keys(localStorage).some(k=>k.indexOf('sb-')===0&&k.indexOf('-auth-token')>0);}catch(e){}
+  if(had){const g=document.getElementById('gate');if(g)g.style.display='none';}
   sb=sb||supabase.createClient(RF_CONFIG.url,RF_CONFIG.anonKey);
-  try{const{data:{session}}=await sb.auth.getSession();if(session)await start();}catch(e){}
+  try{const{data:{session}}=await sb.auth.getSession();if(session){await start();return;}}catch(e){}
+  const g=document.getElementById('gate');if(g)g.style.display='';
 })();
 
 function escapeHtml(s){ return (s==null?'':String(s)).replace(/[&<>"']/g,

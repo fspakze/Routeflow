@@ -87,6 +87,7 @@
   .map-fs{position:fixed!important;inset:0!important;width:100%!important;height:100%!important;z-index:4000;border-radius:0!important;margin:0!important}
   .map-fs-close{position:fixed;top:12px;left:12px;z-index:4001;background:#111827;color:#fff;border:0;border-radius:10px;padding:10px 16px;font-size:15px;font-weight:700;box-shadow:0 4px 14px rgba(0,0,0,.3);cursor:pointer}
   .map-fs-btn{position:absolute;top:8px;left:8px;z-index:500;background:#fff;border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:12px;font-weight:600;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.12)}
+  .map-mode-btn{position:absolute;top:46px;left:8px;z-index:500;background:#fff;border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:12px;font-weight:600;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.12)}
   .map-hold{position:relative}
   .legend .lrow{display:flex;align-items:center;gap:6px;user-select:none}
   .legend .lrow.off{opacity:.35}
@@ -169,7 +170,8 @@
         <div id="stopSearchResults" style="margin-bottom:10px"></div>
         <div id="planWrap">
           <div class="map-hold"><div id="planMap"></div>
-            <button type="button" class="map-fs-btn" id="planFsBtn">⛶ เต็มจอ</button></div>
+            <button type="button" class="map-fs-btn" id="planFsBtn">⛶ เต็มจอ</button>
+            <button type="button" class="map-mode-btn" id="planModeBtn" title="สลับรวมร้าน/แสดงจุดจริง">⚫ ไม่รวม</button></div>
           <div>
             <div class="row" style="margin-bottom:8px">
               <b style="flex:1">ลำดับส่ง (<span id="stopCount">0</span> ร้าน)</b>
@@ -260,6 +262,7 @@ const LS={url:'rf_sb_url',key:'rf_sb_key'};
 let sb=null, me=null, customers=[], vehicles=[], crew=[], depots=[], allTrips=[], editTripId=null, selected=[], planMap=null, cluster=null, markerById={};
 const PALETTE=['#0f9d58','#0288d1','#f57c00','#9c27b0','#d81b60','#00897b','#5e35b1','#c62828','#3949ab','#6d4c41','#00acc1','#7cb342','#8d6e63','#e53935','#1e88e5','#fb8c00'];
 let colorOf={}, styleOf={}, hiddenCat=new Set(), _pcats=[];
+let flatLayer=null, dotById={}, planClusterMode=(localStorage.getItem('rf_plan_map_mode')!=='flat');
 const STYLE_LS='rf_marker_styles';   // ใช้ร่วมกับ map.html
 const SHAPES=['circle','square','triangle','diamond','star','house','pin'];
 const SHAPE_LABEL={circle:'วงกลม',square:'สี่เหลี่ยม',triangle:'สามเหลี่ยม',diamond:'ข้าวหลามตัด',star:'ดาว',house:'บ้าน',pin:'หมุด'};
@@ -472,21 +475,28 @@ function renderCrewPick(){
 }
 function buildPlanMap(){
   if(planMap){planMap.remove();planMap=null;}
-  planMap=L.map('planMap').setView([15.11,105.82],13);
+  planMap=L.map('planMap',{preferCanvas:true}).setView([15.11,105.82],13);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OSM'}).addTo(planMap);
   const counts={}; customers.forEach(c=>{const k=c.category||'(ไม่ระบุ)';counts[k]=(counts[k]||0)+1;});
   _pcats=Object.keys(counts).sort((a,b)=>counts[b]-counts[a]); _pcounts=counts;
   loadStyles(_pcats);
   cluster=L.markerClusterGroup({maxClusterRadius:45});
-  markerById={};
+  flatLayer=L.layerGroup();
+  markerById={}; dotById={};
   customers.forEach(c=>{
     const cat=c.category||'(ไม่ระบุ)';
     const m=L.marker([c.lat,c.lng],{icon:makeIcon(styleOf[cat])});
     m._c=c; m.bindTooltip(c.name,{direction:'top'});
     m.on('click',()=>toggleStop(c));
     markerById[c.id]=m; cluster.addLayer(m);
+    // จุดจริง (โหมดไม่รวม) — circleMarker บน canvas
+    const dot=L.circleMarker([c.lat,c.lng],dotStyleP(styleOf[cat].color,false));
+    dot._c=c; dot.bindTooltip(c.name,{direction:'top'});
+    dot.on('click',()=>toggleStop(c));
+    dotById[c.id]=dot; flatLayer.addLayer(dot);
   });
-  planMap.addLayer(cluster);
+  planMap.addLayer(activePlanLayer());
+  updatePlanModeBtn();
   buildPlanLegend();
   // ปักหมุดที่เลือกไว้ (ถ้ามี) ให้ยังคงสถานะ
   refreshMarkers();
@@ -524,9 +534,32 @@ function renderPlanLegend(d){
   });
 }
 function togglePlanCat(c){
-  if(hiddenCat.has(c)){hiddenCat.delete(c);customers.filter(x=>(x.category||'(ไม่ระบุ)')===c).forEach(x=>{const m=markerById[x.id];if(m)cluster.addLayer(m);});}
-  else{hiddenCat.add(c);customers.filter(x=>(x.category||'(ไม่ระบุ)')===c).forEach(x=>{const m=markerById[x.id];if(m)cluster.removeLayer(m);});}
-  renderPlanLegend();
+  if(hiddenCat.has(c))hiddenCat.delete(c); else hiddenCat.add(c);
+  applyPlanVisibility(); renderPlanLegend();
+}
+/* สลับ รวมร้าน (cluster) ↔ ไม่รวม/จุดจริง (circleMarker) — เหมือน map.html */
+function dotStyleP(color,sel){ return sel
+  ? {radius:8,color:'#fff',weight:2,fillColor:'#ea580c',fillOpacity:1}
+  : {radius:5,color:'#fff',weight:1,fillColor:color,fillOpacity:.95}; }
+function activePlanLayer(){ return planClusterMode?cluster:flatLayer; }
+function updatePlanModeBtn(){ const b=$('#planModeBtn'); if(b)b.textContent=planClusterMode?'⚫ ไม่รวม':'🔵 รวม'; }
+function applyPlanVisibility(){
+  const lay=activePlanLayer();
+  customers.forEach(x=>{
+    const cat=x.category||'(ไม่ระบุ)';
+    const item=planClusterMode?markerById[x.id]:dotById[x.id];
+    if(!item)return;
+    const vis=!hiddenCat.has(cat), on=lay.hasLayer(item);
+    if(vis&&!on)lay.addLayer(item);
+    if(!vis&&on)lay.removeLayer(item);
+  });
+}
+function setPlanMode(on){
+  if(planClusterMode===on||!planMap)return;
+  planMap.removeLayer(activePlanLayer());
+  planClusterMode=on; localStorage.setItem('rf_plan_map_mode',on?'cluster':'flat');
+  planMap.addLayer(activePlanLayer());
+  applyPlanVisibility(); refreshMarkers(); updatePlanModeBtn();
 }
 
 /* ---------- marker style engine (ใช้ร่วมกับ map.html ผ่าน localStorage) ---------- */
@@ -551,10 +584,18 @@ function makeSelIcon(seq){const px=30;
     className:'rf-sel',iconSize:[px,px],iconAnchor:[px/2,px/2]});}
 function refreshMarkers(){
   Object.values(markerById).forEach(m=>{const cat=m._c.category||'(ไม่ระบุ)';m.setIcon(makeIcon(styleOf[cat]));});
-  selected.forEach((s,i)=>{const m=markerById[s.id];if(m)m.setIcon(makeSelIcon(i+1));});
+  Object.values(dotById).forEach(d=>{const cat=d._c.category||'(ไม่ระบุ)';d.setStyle(dotStyleP(styleOf[cat].color,false));});
+  selected.forEach((s,i)=>{
+    const m=markerById[s.id];if(m)m.setIcon(makeSelIcon(i+1));
+    const d=dotById[s.id];if(d)d.setStyle(dotStyleP('#ea580c',true));
+  });
 }
 function applyCatStyle(cat){const ic=styleOf[cat];colorOf[cat]=ic.color;
-  customers.filter(x=>(x.category||'(ไม่ระบุ)')===cat).forEach(x=>{const m=markerById[x.id];if(m&&!selected.find(s=>s.id===x.id))m.setIcon(makeIcon(ic));});
+  customers.filter(x=>(x.category||'(ไม่ระบุ)')===cat).forEach(x=>{
+    const seld=selected.find(s=>s.id===x.id);
+    const m=markerById[x.id];if(m&&!seld)m.setIcon(makeIcon(ic));
+    const d=dotById[x.id];if(d&&!seld)d.setStyle(dotStyleP(ic.color,false));
+  });
   saveStyles();renderPlanLegend();}
 function openStyleEditor(cat){closeStyleEditor();const st=styleOf[cat];
   const box=document.createElement('div');box.className='styleEditor';box.id='styleEditor';
@@ -649,6 +690,7 @@ function toggleMapFS(mapObj,elId,btnId){
   setTimeout(()=>mapObj.invalidateSize(),200);
 }
 $('#planFsBtn').onclick=()=>toggleMapFS(planMap,'planMap','planFsBtn');
+$('#planModeBtn').onclick=()=>setPlanMode(!planClusterMode);
 async function optimizeStops(){
   if(selected.length<2){toast('ต้องมีอย่างน้อย 2 ร้าน');return;}
   const ll=$('#tOriginLL').value.trim(); let origin=null;

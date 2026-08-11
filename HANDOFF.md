@@ -12,7 +12,7 @@
 **ไม่มี build step** — เว็บเป็นไฟล์ HTML ล้วน โฮสต์บน GitHub Pages
 **PWA ติดตั้งได้** (responsive desktop+mobile) — `manifest.webmanifest` (hub) + `manifest-driver.webmanifest` (คนขับ) + `sw.js` (service worker) + `icon.svg` · ทุกหน้ากด "เพิ่มลงหน้าจอโฮม/ติดตั้ง" ได้
 **แผนที่บนมือถือ:** legend หมวดร้าน **ย่อได้** (มือถือย่อไว้ก่อน แตะหัวข้อเพื่อกาง — เลิกบังหมุด) · ปุ่ม **⛶ เต็มจอ** ที่ planMap (admin) และ pickMap (stores) เปิดแผนที่เต็มจอปักหมุด/เลือกร้านได้ไม่ชนกับการเลื่อนหน้า · หน้า stores มีปุ่ม "📌 ใช้ตำแหน่งปัจจุบัน" + แสดงพิกัดสดด้านบนแผนที่
-**แผนที่ร้าน (map.html):** ปุ่มสลับ **รวมร้านเป็นจำนวน (cluster) ↔ ไม่รวม/จุดจริง (circleMarker บน canvas)** — จำค่าไว้ใน localStorage `rf_map_mode` · ค้นหาด้วยเบอร์โทรได้
+**แผนที่ร้าน:** ปุ่มสลับ **รวมร้านเป็นจำนวน (cluster) ↔ ไม่รวม/จุดจริง (circleMarker บน canvas)** ทั้ง map.html (`rf_map_mode`) และ planMap ในหน้าวางแผน trip (`rf_plan_map_mode`) — จำค่าไว้ · ในโหมดจุดจริงบน planMap ร้านที่เลือกจะเป็นจุดส้มใหญ่ · map.html ค้นหาด้วยเบอร์โทรได้
 **วางแผน trip (admin.html):** ช่องค้นหาร้านเพื่อเพิ่มลงเส้นทาง (ชื่อ/รหัส/**เบอร์โทร**) นอกเหนือจากคลิกหมุด
 **จำ login ข้ามหน้า:** ทุกหน้า boot() ซ่อนหน้า login ทันทีถ้ามี session ใน localStorage (กันจอ login แว็บ) แล้วค่อยตรวจ — หมดอายุจึงโชว์ login กลับ
 

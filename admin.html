@@ -33,9 +33,11 @@
   header{display:flex;align-items:center;gap:12px;padding:9px 14px;background:var(--card);border-bottom:1px solid var(--line);flex-wrap:wrap}
   header .logo{font-weight:800;color:var(--brand);font-size:16px}
   header .me{font-size:12px;color:var(--muted);margin-left:auto}
-  .tabs{display:flex;gap:4px;padding:8px 14px 0;background:var(--card)}
+  .tabs{display:flex;gap:4px;padding:8px 14px 0;background:var(--card);align-items:center}
   .tabs button{padding:8px 16px;border:1px solid var(--line);border-bottom:0;background:#fff;border-radius:9px 9px 0 0;cursor:pointer;font-size:14px;color:var(--muted)}
   .tabs button.active{color:var(--brand);font-weight:700;background:var(--bg)}
+  .tabgrp{font-size:11px;color:var(--muted);font-weight:700;padding:0 6px 6px;letter-spacing:.3px;align-self:flex-end}
+  .tabsep{width:1px;align-self:stretch;background:var(--line);margin:4px 8px 0}
   main{flex:1;min-height:0;overflow:auto;padding:16px}
   .pane{display:none}.pane.active{display:block}
   /* generic */
@@ -129,7 +131,11 @@
     <button class="btn ghost sm" id="logoutBtn">ออก</button>
   </header>
   <div class="tabs" id="tabs" style="display:none">
+    <span class="tabgrp">งานประจำวัน</span>
     <button data-tab="plan" class="active">📋 วางแผน trip</button>
+    <button data-tab="history">🕘 ประวัติเส้นทาง</button>
+    <span class="tabsep"></span>
+    <span class="tabgrp">ตั้งค่าระบบ / พนักงาน</span>
     <button data-tab="veh">🚚 รถ</button>
     <button data-tab="crew">👥 ทีมงาน</button>
     <button data-tab="perms">🔑 สิทธิ์</button>
@@ -189,6 +195,21 @@
           <button class="btn" id="saveTrip">💾 บันทึก trip</button>
         </div>
         <div class="err" id="perr"></div>
+      </div>
+    </div>
+
+    <!-- HISTORY (ประวัติเส้นทาง) -->
+    <div class="pane" id="pane-history">
+      <div class="card">
+        <h3>🕘 ประวัติเส้นทาง — แก้ไข / ลบ ย้อนหลัง</h3>
+        <div class="row" style="margin-bottom:10px;align-items:flex-end">
+          <div class="field"><label class="fl">ค้นหา</label><input id="histSearch" placeholder="รหัส trip / ทะเบียน / วันที่"></div>
+          <div class="field" style="max-width:180px"><label class="fl">สถานะ</label>
+            <select id="histStatus"><option value="">— ทุกสถานะ —</option><option value="planned">วางแผน</option><option value="active">กำลังวิ่ง</option><option value="done">เสร็จ</option></select></div>
+          <button class="btn ghost sm" id="histReload">↻ รีเฟรช</button>
+        </div>
+        <div class="hint" id="histPermNote" style="margin-bottom:8px"></div>
+        <div style="overflow:auto" id="histBody"></div>
       </div>
     </div>
 
@@ -262,7 +283,7 @@ const LS={url:'rf_sb_url',key:'rf_sb_key'};
 let sb=null, me=null, customers=[], vehicles=[], crew=[], depots=[], allTrips=[], editTripId=null, selected=[], planMap=null, cluster=null, markerById={};
 const PALETTE=['#0f9d58','#0288d1','#f57c00','#9c27b0','#d81b60','#00897b','#5e35b1','#c62828','#3949ab','#6d4c41','#00acc1','#7cb342','#8d6e63','#e53935','#1e88e5','#fb8c00'];
 let colorOf={}, styleOf={}, hiddenCat=new Set(), _pcats=[];
-let flatLayer=null, dotById={}, planClusterMode=(localStorage.getItem('rf_plan_map_mode')!=='flat');
+let flatLayer=null, planClusterMode=(localStorage.getItem('rf_plan_map_mode')!=='flat');
 const STYLE_LS='rf_marker_styles';   // ใช้ร่วมกับ map.html
 const SHAPES=['circle','square','triangle','diamond','star','house','pin'];
 const SHAPE_LABEL={circle:'วงกลม',square:'สี่เหลี่ยม',triangle:'สามเหลี่ยม',diamond:'ข้าวหลามตัด',star:'ดาว',house:'บ้าน',pin:'หมุด'};
@@ -312,6 +333,7 @@ $$('.tabs button').forEach(b=>b.onclick=()=>{
   $$('.tabs button').forEach(x=>x.classList.remove('active'));b.classList.add('active');
   $$('.pane').forEach(p=>p.classList.remove('active'));$('#pane-'+b.dataset.tab).classList.add('active');
   if(b.dataset.tab==='plan'&&planMap)setTimeout(()=>planMap.invalidateSize(),50);
+  if(b.dataset.tab==='history')renderHistory();
 });
 
 async function loadAll(){
@@ -322,24 +344,82 @@ async function loadAll(){
     sb.from('profiles').select('id,full_name,role,phone,is_active,username').order('role'),
     sb.from('role_permissions').select('*'),
     sb.from('depots').select('*').order('name'),
-    sb.from('trips').select('*').gte('trip_date',today).order('trip_date').order('planned_depart'),
+    sb.from('trips').select('*').order('trip_date',{ascending:false}).order('planned_depart',{ascending:false}).limit(500),
     sb.from('app_settings').select('*')
   ]);
   customers=cRes.data||[]; vehicles=vRes.data||[]; crew=pRes.data||[]; depots=dRes.data||[]; allTrips=tRes.data||[];
   perms={}; (rpRes.data||[]).forEach(r=>perms[r.role]=r); myPerm=perms[me.role]||{};
   FLAGS={}; (fRes.data||[]).forEach(r=>FLAGS[r.key]=r.enabled);
   renderVehSelect(); renderCrewPick(); renderVehTable(); renderCrewTable(); renderPerms(); applyTabGating();
-  renderDepotSelect(); renderDepotMgr(); renderTripPick(); buildPlanMap();
+  renderDepotSelect(); renderDepotMgr(); renderTripPick(); renderHistory(); buildPlanMap();
 }
 /* ---------- แก้ไข trip ที่มีอยู่ ---------- */
 function renderTripPick(){
   const sel=$('#tripPick'); if(!sel)return;
-  const editable=allTrips.filter(t=>t.status==='planned');
+  const today=new Date().toISOString().slice(0,10);
+  const editable=allTrips.filter(t=>t.status==='planned'&&(t.trip_date||'')>=today);
   sel.innerHTML='<option value="new">➕ สร้าง trip ใหม่</option>'+
     editable.map(t=>`<option value="${t.id}">✏️ ${esc(t.trip_code)} · ${t.trip_date}</option>`).join('');
   sel.value=editTripId?String(editTripId):'new';
   sel.onchange=()=>{ if(sel.value==='new')newTrip(); else loadTripForEdit(+sel.value); };
 }
+/* ---------- ประวัติเส้นทาง (แก้ไข/ลบ ย้อนหลัง) ---------- */
+function canEditTrip(){ return me.role==='admin' || !!myPerm.can_edit_trip; }
+function canDelTrip(){ return me.role==='admin' || !!myPerm.can_del_trip; }
+const TRIP_STATUS={planned:'📋 วางแผน',active:'🚚 กำลังวิ่ง',done:'✅ เสร็จ',cancelled:'✖ ยกเลิก'};
+function renderHistory(){
+  const host=$('#histBody'); if(!host)return;
+  const note=$('#histPermNote');
+  if(note)note.innerHTML=(canEditTrip()||canDelTrip())
+    ? `สิทธิ์ของคุณ: ${canEditTrip()?'✅ แก้ไขได้':'⛔ แก้ไขไม่ได้'} · ${canDelTrip()?'✅ ลบได้':'⛔ ลบไม่ได้'}`
+    : '⚠️ คุณไม่มีสิทธิ์แก้/ลบประวัติเส้นทาง (ดูอย่างเดียว) — Admin ตั้งค่าได้ที่แท็บ 🔑 สิทธิ์';
+  const q=($('#histSearch').value||'').trim().toLowerCase();
+  const st=$('#histStatus').value||'';
+  const plate=id=>{const v=vehicles.find(x=>x.id===id);return v?v.plate_no:'-';};
+  let rows=allTrips.slice();
+  if(st)rows=rows.filter(t=>t.status===st);
+  if(q)rows=rows.filter(t=>(t.trip_code||'').toLowerCase().includes(q)||(t.trip_date||'').includes(q)||plate(t.vehicle_id).toLowerCase().includes(q));
+  if(!rows.length){host.innerHTML='<div class="muted">ไม่มีเส้นทางตามเงื่อนไข</div>';return;}
+  const canAny=canEditTrip()||canDelTrip();
+  host.innerHTML=`<table><tr><th>วันที่</th><th>รหัส trip</th><th>รถ</th><th>สถานะ</th><th>ร้าน</th>${canAny?'<th></th>':''}</tr>
+    ${rows.map(t=>`<tr>
+      <td>${esc(t.trip_date||'-')}</td>
+      <td><b>${esc(t.trip_code||'-')}</b></td>
+      <td>${esc(plate(t.vehicle_id))}</td>
+      <td>${TRIP_STATUS[t.status]||esc(t.status||'-')}</td>
+      <td>${t.planned_stops==null?'-':t.planned_stops}</td>
+      ${canAny?`<td style="white-space:nowrap">
+        ${canEditTrip()?`<button class="btn ghost sm" data-edit="${t.id}">✏️ แก้ไข</button>`:''}
+        ${canDelTrip()?`<button class="btn ghost sm" data-del="${t.id}" style="color:var(--bad)">🗑️ ลบ</button>`:''}
+      </td>`:''}</tr>`).join('')}</table>`;
+  host.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>{
+    $('.tabs button[data-tab="plan"]').click();
+    loadTripForEdit(+b.dataset.edit);
+  });
+  host.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>delTrip(+b.dataset.del));
+}
+async function delTrip(id){
+  if(!canDelTrip()){toast('ไม่มีสิทธิ์ลบ');return;}
+  const t=allTrips.find(x=>x.id===id);
+  if(!confirm(`ลบเส้นทาง ${t?t.trip_code:id} ถาวร?\nจะลบจุดส่ง/ทีมงาน/GPS ที่บันทึกไว้ทั้งหมด — กู้คืนไม่ได้`))return;
+  try{
+    // ลบลูกก่อน กันกรณีไม่มี ON DELETE CASCADE (best effort — ตารางที่ไม่มีจะถูกข้าม)
+    await sb.from('trip_stops').delete().eq('trip_id',id);
+    await sb.from('trip_crew').delete().eq('trip_id',id);
+    await sb.from('gps_pings').delete().eq('trip_id',id);
+    await sb.from('off_route_events').delete().eq('trip_id',id);
+    await sb.from('delivery_proofs').delete().eq('trip_id',id);
+    const{error}=await sb.from('trips').delete().eq('id',id);
+    if(error)throw error;
+    if(editTripId===id)newTrip();
+    toast('🗑️ ลบเส้นทางแล้ว');
+    await loadAll();
+    const hb=$('.tabs button[data-tab="history"]'); if(hb&&hb.style.display!=='none')hb.click();
+  }catch(e){toast('ลบไม่สำเร็จ: '+(e.message||e));}
+}
+$('#histSearch').addEventListener('input',renderHistory);
+$('#histStatus').addEventListener('change',renderHistory);
+$('#histReload').onclick=()=>loadAll();
 async function loadTripForEdit(id){
   const t=allTrips.find(x=>x.id===id); if(!t)return;
   editTripId=id;
@@ -436,6 +516,7 @@ function applyTabGating(){
   const isAdmin=(me.role==='admin');
   $$('.tabs button').forEach(b=>{const t=b.dataset.tab;let show=true;
     if(t==='perms')show=isAdmin;
+    else if(t==='history')show=isAdmin||noMatrix||!!myPerm.can_plan||!!myPerm.can_edit_trip||!!myPerm.can_del_trip;
     else if(!noMatrix&&map[t])show=isAdmin||!!myPerm[map[t]];
     b.style.display=show?'':'none';});
   const active=$('.tabs button.active');
@@ -446,11 +527,15 @@ function renderPerms(){
   const isAdmin=(me.role==='admin');
   const roles=ROLES.filter(r=>perms[r]);
   if(!roles.length){host.innerHTML='<div class="muted">ยังไม่มีตาราง role_permissions — รัน <code>roles_permissions.sql</code> ใน Supabase ก่อน</div>';return;}
-  host.innerHTML=`<table><tr><th>ตำแหน่ง</th>${PERMS.map(p=>`<th style="text-align:center;font-size:11px">${p[1]}</th>`).join('')}</tr>
+  // แสดงเฉพาะสิทธิ์ที่มีคอลัมน์จริงในตาราง (กันพังก่อนรัน trip_history_perms.sql)
+  const cols=PERMS.filter(p=>roles.some(r=>p[0] in perms[r]));
+  const missing=PERMS.some(p=>!roles.some(r=>p[0] in perms[r]));
+  host.innerHTML=`<table><tr><th>ตำแหน่ง</th>${cols.map(p=>`<th style="text-align:center;font-size:11px">${p[1]}</th>`).join('')}</tr>
     ${roles.map(r=>`<tr><td><b>${esc(ROLE_LABEL[r]||r)}</b> <span class="muted" style="font-size:11px">${r}</span></td>
-      ${PERMS.map(p=>`<td style="text-align:center"><input type="checkbox" style="width:auto" data-r="${r}" data-p="${p[0]}" ${perms[r][p[0]]?'checked':''} ${(isAdmin&&r!=='admin')?'':'disabled'}></td>`).join('')}
+      ${cols.map(p=>`<td style="text-align:center"><input type="checkbox" style="width:auto" data-r="${r}" data-p="${p[0]}" ${perms[r][p[0]]?'checked':''} ${(isAdmin&&r!=='admin')?'':'disabled'}></td>`).join('')}
     </tr>`).join('')}</table>
-    <div class="hint" style="margin-top:8px">${isAdmin?'ติ๊ก/เอาออก = บันทึกทันที · ตำแหน่ง admin ล็อกไว้ (สิทธิ์เต็มเสมอ)':'⚠️ เฉพาะ Admin แก้ไขสิทธิ์ได้ — คุณดูได้อย่างเดียว'}</div>`;
+    <div class="hint" style="margin-top:8px">${isAdmin?'ติ๊ก/เอาออก = บันทึกทันที · ตำแหน่ง admin ล็อกไว้ (สิทธิ์เต็มเสมอ)':'⚠️ เฉพาะ Admin แก้ไขสิทธิ์ได้ — คุณดูได้อย่างเดียว'}</div>
+    ${missing?'<div class="hint" style="color:var(--bad)">⚠️ ยังไม่เห็นสิทธิ์ "แก้/ลบ ประวัติเส้นทาง" — ต้องรัน <code>trip_history_perms.sql</code> ใน Supabase ก่อน</div>':''}`;
   if(isAdmin)host.querySelectorAll('input[data-p]').forEach(cb=>cb.onchange=async()=>{
     const r=cb.dataset.r,k=cb.dataset.p,val=cb.checked;
     const{error}=await sb.from('role_permissions').update({[k]:val,updated_at:new Date().toISOString()}).eq('role',r);
@@ -482,20 +567,16 @@ function buildPlanMap(){
   loadStyles(_pcats);
   cluster=L.markerClusterGroup({maxClusterRadius:45});
   flatLayer=L.layerGroup();
-  markerById={}; dotById={};
+  markerById={};
   customers.forEach(c=>{
     const cat=c.category||'(ไม่ระบุ)';
     const m=L.marker([c.lat,c.lng],{icon:makeIcon(styleOf[cat])});
     m._c=c; m.bindTooltip(c.name,{direction:'top'});
     m.on('click',()=>toggleStop(c));
-    markerById[c.id]=m; cluster.addLayer(m);
-    // จุดจริง (โหมดไม่รวม) — circleMarker บน canvas
-    const dot=L.circleMarker([c.lat,c.lng],dotStyleP(styleOf[cat].color,false));
-    dot._c=c; dot.bindTooltip(c.name,{direction:'top'});
-    dot.on('click',()=>toggleStop(c));
-    dotById[c.id]=dot; flatLayer.addLayer(dot);
+    markerById[c.id]=m;
   });
   planMap.addLayer(activePlanLayer());
+  applyPlanVisibility();   // เติมหมุดลง layer ที่ใช้อยู่ (cluster หรือ flat)
   updatePlanModeBtn();
   buildPlanLegend();
   // ปักหมุดที่เลือกไว้ (ถ้ามี) ให้ยังคงสถานะ
@@ -537,26 +618,22 @@ function togglePlanCat(c){
   if(hiddenCat.has(c))hiddenCat.delete(c); else hiddenCat.add(c);
   applyPlanVisibility(); renderPlanLegend();
 }
-/* สลับ รวมร้าน (cluster) ↔ ไม่รวม/จุดจริง (circleMarker) — เหมือน map.html */
-function dotStyleP(color,sel){ return sel
-  ? {radius:8,color:'#fff',weight:2,fillColor:'#ea580c',fillOpacity:1}
-  : {radius:5,color:'#fff',weight:1,fillColor:color,fillOpacity:.95}; }
+/* สลับ รวมร้าน (cluster) ↔ ไม่รวม (หมุดเดิม แต่ไม่จับกลุ่ม — เห็นรูปทรง/ขนาดที่ปรับทันที) */
 function activePlanLayer(){ return planClusterMode?cluster:flatLayer; }
 function updatePlanModeBtn(){ const b=$('#planModeBtn'); if(b)b.textContent=planClusterMode?'⚫ ไม่รวม':'🔵 รวม'; }
 function applyPlanVisibility(){
   const lay=activePlanLayer();
   customers.forEach(x=>{
     const cat=x.category||'(ไม่ระบุ)';
-    const item=planClusterMode?markerById[x.id]:dotById[x.id];
-    if(!item)return;
-    const vis=!hiddenCat.has(cat), on=lay.hasLayer(item);
-    if(vis&&!on)lay.addLayer(item);
-    if(!vis&&on)lay.removeLayer(item);
+    const m=markerById[x.id]; if(!m)return;
+    const vis=!hiddenCat.has(cat), on=lay.hasLayer(m);
+    if(vis&&!on)lay.addLayer(m);
+    if(!vis&&on)lay.removeLayer(m);
   });
 }
 function setPlanMode(on){
   if(planClusterMode===on||!planMap)return;
-  planMap.removeLayer(activePlanLayer());
+  const old=activePlanLayer(); planMap.removeLayer(old); old.clearLayers();
   planClusterMode=on; localStorage.setItem('rf_plan_map_mode',on?'cluster':'flat');
   planMap.addLayer(activePlanLayer());
   applyPlanVisibility(); refreshMarkers(); updatePlanModeBtn();
@@ -584,17 +661,11 @@ function makeSelIcon(seq){const px=30;
     className:'rf-sel',iconSize:[px,px],iconAnchor:[px/2,px/2]});}
 function refreshMarkers(){
   Object.values(markerById).forEach(m=>{const cat=m._c.category||'(ไม่ระบุ)';m.setIcon(makeIcon(styleOf[cat]));});
-  Object.values(dotById).forEach(d=>{const cat=d._c.category||'(ไม่ระบุ)';d.setStyle(dotStyleP(styleOf[cat].color,false));});
-  selected.forEach((s,i)=>{
-    const m=markerById[s.id];if(m)m.setIcon(makeSelIcon(i+1));
-    const d=dotById[s.id];if(d)d.setStyle(dotStyleP('#ea580c',true));
-  });
+  selected.forEach((s,i)=>{const m=markerById[s.id];if(m)m.setIcon(makeSelIcon(i+1));});
 }
 function applyCatStyle(cat){const ic=styleOf[cat];colorOf[cat]=ic.color;
   customers.filter(x=>(x.category||'(ไม่ระบุ)')===cat).forEach(x=>{
-    const seld=selected.find(s=>s.id===x.id);
-    const m=markerById[x.id];if(m&&!seld)m.setIcon(makeIcon(ic));
-    const d=dotById[x.id];if(d&&!seld)d.setStyle(dotStyleP(ic.color,false));
+    const m=markerById[x.id];if(m&&!selected.find(s=>s.id===x.id))m.setIcon(makeIcon(ic));
   });
   saveStyles();renderPlanLegend();}
 function openStyleEditor(cat){closeStyleEditor();const st=styleOf[cat];
@@ -817,7 +888,7 @@ $('#addUser').onclick=async()=>{
 };
 const ROLES=['admin','manager','dc_head','driver','helper','viewer'];
 const ROLE_LABEL={admin:'ผู้ดูแลระบบ',manager:'ผู้จัดการ',dc_head:'หัวหน้า DC',driver:'คนขับ',helper:'ผู้ช่วย',viewer:'ดูอย่างเดียว'};
-const PERMS=[['can_dashboard','แดชบอร์ด'],['can_plan','วางแผน trip'],['can_stores','จัดการร้าน'],['can_vehicles','จัดการรถ'],['can_reports','รายงาน'],['can_staff','จัดการพนักงาน'],['can_driver_app','แอปคนขับ']];
+const PERMS=[['can_dashboard','แดชบอร์ด'],['can_plan','วางแผน trip'],['can_stores','จัดการร้าน'],['can_vehicles','จัดการรถ'],['can_reports','รายงาน'],['can_staff','จัดการพนักงาน'],['can_driver_app','แอปคนขับ'],['can_edit_trip','แก้ประวัติเส้นทาง'],['can_del_trip','ลบประวัติเส้นทาง']];
 let perms={}, myPerm={}, FLAGS={};
 function renderCrewTable(){
   const el=$('#crewTable');

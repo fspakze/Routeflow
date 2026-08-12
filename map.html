@@ -134,7 +134,7 @@ const PALETTE = ['#0f9d58','#0288d1','#f57c00','#9c27b0','#d81b60','#00897b',
                  '#8d6e63','#e53935','#1e88e5','#fb8c00'];
 
 let sb=null, allRows=[], cluster=null, map=null, colorOf={}, groupLayers={}, hidden=new Set();
-let flatLayer=null, flatByCat={}, clusterMode=(localStorage.getItem('rf_map_mode')!=='flat');
+let flatLayer=null, clusterMode=(localStorage.getItem('rf_map_mode')!=='flat');
 let styleOf={}, _legendCats=[], _legendCounts={};
 const STYLE_LS='rf_marker_styles';
 const SHAPES=['circle','square','triangle','diamond','star','house','pin'];
@@ -190,24 +190,20 @@ function buildMap(){
 
   cluster = L.markerClusterGroup({ maxClusterRadius:45, spiderfyOnMaxZoom:true });
   flatLayer = L.layerGroup();
-  cats.forEach(c=>{ groupLayers[c]=[]; flatByCat[c]=[]; });
+  cats.forEach(c=> groupLayers[c]=[]);
 
   allRows.forEach(r=>{
     const cat=r.category||'(ไม่ระบุ)';
     const m=L.marker([r.lat,r.lng],{icon:makeIcon(styleOf[cat])});
     m._cat=cat; m._row=r; m.bindPopup(popupHtml(r));
-    groupLayers[cat].push(m); cluster.addLayer(m);
-    // จุดจริง (ไม่รวม) — ใช้ circleMarker วาดบน canvas เร็วแม้หลายพันจุด
-    const dot=L.circleMarker([r.lat,r.lng],dotStyle(styleOf[cat].color));
-    dot._cat=cat; dot._row=r; dot.bindPopup(popupHtml(r));
-    flatByCat[cat].push(dot); flatLayer.addLayer(dot);
+    groupLayers[cat].push(m);
   });
   map.addLayer(activeLayer());
   updateModeBtn();
 
   buildLegend(cats,counts);
   $('#total').textContent = allRows.length;
-  applyFilter();
+  applyFilter();   // เติมหมุดที่มองเห็นลง layer ที่ใช้อยู่ (cluster หรือ flat)
   fitMain();
 
   $('#q').addEventListener('input', applyFilter);
@@ -215,13 +211,13 @@ function buildMap(){
   $('#modeBtn').addEventListener('click', ()=>setMode(!clusterMode));
   $('#logoutBtn').addEventListener('click', logout);
 }
-function dotStyle(color){ return {radius:5, color:'#fff', weight:1, fillColor:color, fillOpacity:.95}; }
+// โหมด "ไม่รวม" = หมุดเดิม (รูปทรง+ขนาด+สีตามที่ตั้ง) แต่ไม่จับกลุ่ม → เห็นสไตล์ที่ปรับทันที
 function activeLayer(){ return clusterMode?cluster:flatLayer; }
-function activeMarkers(cat){ return clusterMode?(groupLayers[cat]||[]):(flatByCat[cat]||[]); }
+function activeMarkers(cat){ return groupLayers[cat]||[]; }
 function updateModeBtn(){ const b=$('#modeBtn'); if(b)b.textContent=clusterMode?'⚫ ไม่รวมร้าน':'🔵 รวมเป็นจำนวน'; }
 function setMode(on){
   if(clusterMode===on)return;
-  map.removeLayer(activeLayer());
+  const old=activeLayer(); map.removeLayer(old); old.clearLayers();
   clusterMode=on; localStorage.setItem('rf_map_mode', on?'cluster':'flat');
   map.addLayer(activeLayer());
   updateModeBtn(); applyFilter();
@@ -309,8 +305,7 @@ function makeIcon(st){
 }
 function applyCatStyle(cat){
   const ic=styleOf[cat]; colorOf[cat]=ic.color;
-  groupLayers[cat].forEach(m=>m.setIcon(makeIcon(ic)));
-  (flatByCat[cat]||[]).forEach(d=>d.setStyle({fillColor:ic.color}));
+  groupLayers[cat].forEach(m=>m.setIcon(makeIcon(ic)));  // เปลี่ยนรูปทรง/ขนาด/สี เห็นทันทีในโหมดไม่รวม
   saveStyles(); renderLegend();
 }
 function openStyleEditor(cat){

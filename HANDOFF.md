@@ -12,7 +12,8 @@
 **ไม่มี build step** — เว็บเป็นไฟล์ HTML ล้วน โฮสต์บน GitHub Pages
 **PWA ติดตั้งได้** (responsive desktop+mobile) — `manifest.webmanifest` (hub) + `manifest-driver.webmanifest` (คนขับ) + `sw.js` (service worker) + `icon.svg` · ทุกหน้ากด "เพิ่มลงหน้าจอโฮม/ติดตั้ง" ได้
 **แผนที่บนมือถือ:** legend หมวดร้าน **ย่อได้** (มือถือย่อไว้ก่อน แตะหัวข้อเพื่อกาง — เลิกบังหมุด) · ปุ่ม **⛶ เต็มจอ** ที่ planMap (admin) และ pickMap (stores) เปิดแผนที่เต็มจอปักหมุด/เลือกร้านได้ไม่ชนกับการเลื่อนหน้า · หน้า stores มีปุ่ม "📌 ใช้ตำแหน่งปัจจุบัน" + แสดงพิกัดสดด้านบนแผนที่
-**แผนที่ร้าน:** ปุ่มสลับ **รวมร้านเป็นจำนวน (cluster) ↔ ไม่รวม/จุดจริง (circleMarker บน canvas)** ทั้ง map.html (`rf_map_mode`) และ planMap ในหน้าวางแผน trip (`rf_plan_map_mode`) — จำค่าไว้ · ในโหมดจุดจริงบน planMap ร้านที่เลือกจะเป็นจุดส้มใหญ่ · map.html ค้นหาด้วยเบอร์โทรได้
+**แผนที่ร้าน:** ปุ่มสลับ **รวมร้านเป็นจำนวน (cluster) ↔ ไม่รวม (หมุดเดิมแต่ไม่จับกลุ่ม)** ทั้ง map.html (`rf_map_mode`) และ planMap หน้าวางแผน trip (`rf_plan_map_mode`) — จำค่าไว้ · โหมด "ไม่รวม" ใช้หมุดเดียวกับปกติ จึง **เห็นรูปทรง/ขนาด/สีที่ปรับจาก ⚙ ทันที** (โหมดรวมจะเห็นเมื่อซูมจนหมุดแยกกลุ่ม) · map.html ค้นหาด้วยเบอร์โทรได้
+**ประวัติเส้นทาง (admin → แท็บ 🕘):** แก้ไข/ลบ trip ย้อนหลังได้ทุกสถานะ (ลบถาวร ลบลูก trip_stops/trip_crew/gps ให้ด้วย) · คุมด้วยสิทธิ์ `can_edit_trip`/`can_del_trip` (รัน **`trip_history_perms.sql`**) · แท็บจัดกลุ่มเป็น "งานประจำวัน" (วางแผน/ประวัติ) แยกจาก "ตั้งค่าระบบ/พนักงาน" (รถ/ทีมงาน/สิทธิ์)
 **วางแผน trip (admin.html):** ช่องค้นหาร้านเพื่อเพิ่มลงเส้นทาง (ชื่อ/รหัส/**เบอร์โทร**) นอกเหนือจากคลิกหมุด
 **จำ login ข้ามหน้า:** ทุกหน้า boot() ซ่อนหน้า login ทันทีถ้ามี session ใน localStorage (กันจอ login แว็บ) แล้วค่อยตรวจ — หมดอายุจึงโชว์ login กลับ
 
@@ -113,6 +114,7 @@ schema.postgres.sql                              ← ตาราง+RLS (รั
 customers_import.sql                             ← 401 ร้าน (รันแล้ว, gitignored)
 customers_profile.sql / driver_phase.sql         ← migration (รันแล้ว)
 username_login.sql / roles_permissions.sql        ← migration (รันแล้ว)
+trip_history_perms.sql                            ← สิทธิ์แก้/ลบประวัติเส้นทาง (⚠️ ต้องรัน)
 supabase/functions/admin-create-user/index.ts    ← deploy แล้ว
 supabase/functions/admin-delete-user/index.ts    ← deploy แล้ว
 import_customers.mjs / mymaps_full.kml / *.kmz    ← เครื่องมือ import (gitignored)

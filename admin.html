@@ -33,11 +33,13 @@
   header{display:flex;align-items:center;gap:12px;padding:9px 14px;background:var(--card);border-bottom:1px solid var(--line);flex-wrap:wrap}
   header .logo{font-weight:800;color:var(--brand);font-size:16px}
   header .me{font-size:12px;color:var(--muted);margin-left:auto}
-  .tabs{display:flex;gap:4px;padding:8px 14px 0;background:var(--card);align-items:center}
-  .tabs button{padding:8px 16px;border:1px solid var(--line);border-bottom:0;background:#fff;border-radius:9px 9px 0 0;cursor:pointer;font-size:14px;color:var(--muted)}
-  .tabs button.active{color:var(--brand);font-weight:700;background:var(--bg)}
-  .tabgrp{font-size:11px;color:var(--muted);font-weight:700;padding:0 6px 6px;letter-spacing:.3px;align-self:flex-end}
-  .tabsep{width:1px;align-self:stretch;background:var(--line);margin:4px 8px 0}
+  .tabs{display:flex;gap:6px;padding:10px 14px 0;background:var(--card)}
+  .tabs button{padding:9px 20px;border:1px solid var(--line);border-bottom:0;background:#fff;border-radius:10px 10px 0 0;cursor:pointer;font-size:15px;font-weight:600;color:var(--muted)}
+  .tabs button.active{color:var(--brand);font-weight:800;background:var(--bg)}
+  .subtabs{display:flex;gap:6px;padding:8px 14px;background:var(--bg);border-bottom:1px solid var(--line);flex-wrap:wrap;align-items:center}
+  .subtabs .sublabel{font-size:11px;color:var(--muted);font-weight:700;margin-right:2px}
+  .subtabs button{padding:7px 14px;border:1px solid var(--line);background:#fff;border-radius:8px;cursor:pointer;font-size:13px;color:var(--muted)}
+  .subtabs button.active{color:#fff;font-weight:700;background:var(--brand);border-color:var(--brand)}
   main{flex:1;min-height:0;overflow:auto;padding:16px}
   .pane{display:none}.pane.active{display:block}
   /* generic */
@@ -69,8 +71,8 @@
   @media(max-width:820px){#planWrap{grid-template-columns:1fr}#planMap{height:340px}}
   #vehTable,#crewTable,#permsBody{overflow-x:auto}
   @media(max-width:700px){
-    .tabs{overflow-x:auto;flex-wrap:nowrap;-webkit-overflow-scrolling:touch}
-    .tabs button{white-space:nowrap;flex:none}
+    .tabs,.subtabs{overflow-x:auto;flex-wrap:nowrap;-webkit-overflow-scrolling:touch}
+    .tabs button,.subtabs button{white-space:nowrap;flex:none}
     #vehTable table,#crewTable table{min-width:560px}
     header{gap:8px}
     .btn,input,select,textarea{min-height:44px}.btn.sm{min-height:36px}
@@ -130,15 +132,16 @@
     <span class="me" id="me"></span>
     <button class="btn ghost sm" id="logoutBtn">ออก</button>
   </header>
-  <div class="tabs" id="tabs" style="display:none">
-    <span class="tabgrp">งานประจำวัน</span>
-    <button data-tab="plan" class="active">📋 วางแผน trip</button>
-    <button data-tab="history">🕘 ประวัติเส้นทาง</button>
-    <span class="tabsep"></span>
-    <span class="tabgrp">ตั้งค่าระบบ / พนักงาน</span>
-    <button data-tab="veh">🚚 รถ</button>
-    <button data-tab="crew">👥 ทีมงาน</button>
-    <button data-tab="perms">🔑 สิทธิ์</button>
+  <div class="tabs" id="mainTabs" style="display:none">
+    <button data-main="plan" class="active">📋 วางแผนเส้นทาง</button>
+    <button data-main="settings">⚙️ ตั้งค่า</button>
+  </div>
+  <div class="subtabs" id="subTabs" style="display:none">
+    <button data-tab="plan" data-grp="plan" class="active">📋 วางแผน trip</button>
+    <button data-tab="history" data-grp="plan">🕘 ประวัติเส้นทาง</button>
+    <button data-tab="veh" data-grp="settings">🚚 รถขนส่ง</button>
+    <button data-tab="crew" data-grp="settings">👥 ตั้งค่าพนักงาน</button>
+    <button data-tab="perms" data-grp="settings">🔑 สิทธิ์</button>
   </div>
 
   <main id="main" style="display:none">
@@ -314,7 +317,7 @@ async function proceed(){
   me={id:user.id,...(prof||{})};
   if(!prof){ $('#gerr').textContent='login สำเร็จ แต่ยังไม่มี profile — รัน SQL bootstrap สร้าง admin ก่อน'; return false; }
   $('#me').textContent=`${prof.full_name} · ${prof.role}`;
-  $('#gate').style.display='none';$('#bar').style.display='flex';$('#tabs').style.display='flex';$('#main').style.display='';
+  $('#gate').style.display='none';$('#bar').style.display='flex';$('#mainTabs').style.display='flex';$('#subTabs').style.display='flex';$('#main').style.display='';
   await loadAll(); return true;
 }
 $('#logoutBtn').onclick=async()=>{await sb.auth.signOut();location.reload();};
@@ -328,13 +331,28 @@ $('#logoutBtn').onclick=async()=>{await sb.auth.signOut();location.reload();};
   const g=$('#gate');if(g)g.style.display='';   // ไม่มี session/หมดอายุ → โชว์ login กลับมา
 })();
 
-// tabs
-$$('.tabs button').forEach(b=>b.onclick=()=>{
-  $$('.tabs button').forEach(x=>x.classList.remove('active'));b.classList.add('active');
-  $$('.pane').forEach(p=>p.classList.remove('active'));$('#pane-'+b.dataset.tab).classList.add('active');
-  if(b.dataset.tab==='plan'&&planMap)setTimeout(()=>planMap.invalidateSize(),50);
-  if(b.dataset.tab==='history')renderHistory();
-});
+// tabs (2 ชั้น: แท็บหลัก วางแผนเส้นทาง/ตั้งค่า → แท็บย่อยข้างใน)
+function activateSub(btn){
+  if(!btn)return;
+  $$('#subTabs button').forEach(x=>x.classList.remove('active'));btn.classList.add('active');
+  $$('.pane').forEach(p=>p.classList.remove('active'));$('#pane-'+btn.dataset.tab).classList.add('active');
+  if(btn.dataset.tab==='plan'&&planMap)setTimeout(()=>planMap.invalidateSize(),50);
+  if(btn.dataset.tab==='history')renderHistory();
+}
+function showSub(main){
+  $$('#mainTabs button').forEach(x=>x.classList.toggle('active',x.dataset.main===main));
+  $$('#subTabs button').forEach(b=>b.style.display=(b.dataset.grp===main&&b.dataset.gate!=='0')?'':'none');
+  const cur=$('#subTabs button.active');
+  const target=(cur&&cur.dataset.grp===main&&cur.style.display!=='none')?cur
+    :[...$$('#subTabs button')].find(b=>b.dataset.grp===main&&b.style.display!=='none');
+  activateSub(target);
+}
+function goTab(tabName){   // ไปแท็บย่อยพร้อมสลับแท็บหลักให้ถูกกลุ่ม (ใช้จากปุ่มแก้ไข/ลบในประวัติ)
+  const b=[...$$('#subTabs button')].find(x=>x.dataset.tab===tabName); if(!b)return;
+  showSub(b.dataset.grp); activateSub(b);
+}
+$$('#mainTabs button').forEach(b=>b.onclick=()=>showSub(b.dataset.main));
+$$('#subTabs button').forEach(b=>b.onclick=()=>activateSub(b));
 
 async function loadAll(){
   const today=new Date().toISOString().slice(0,10);
@@ -393,7 +411,7 @@ function renderHistory(){
         ${canDelTrip()?`<button class="btn ghost sm" data-del="${t.id}" style="color:var(--bad)">🗑️ ลบ</button>`:''}
       </td>`:''}</tr>`).join('')}</table>`;
   host.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>{
-    $('.tabs button[data-tab="plan"]').click();
+    goTab('plan');
     loadTripForEdit(+b.dataset.edit);
   });
   host.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>delTrip(+b.dataset.del));
@@ -414,7 +432,7 @@ async function delTrip(id){
     if(editTripId===id)newTrip();
     toast('🗑️ ลบเส้นทางแล้ว');
     await loadAll();
-    const hb=$('.tabs button[data-tab="history"]'); if(hb&&hb.style.display!=='none')hb.click();
+    goTab('history');
   }catch(e){toast('ลบไม่สำเร็จ: '+(e.message||e));}
 }
 $('#histSearch').addEventListener('input',renderHistory);
@@ -514,13 +532,20 @@ function applyTabGating(){
   const noMatrix=Object.keys(perms).length===0;   // ยังไม่ได้รัน roles_permissions.sql → ไม่ gate (โชว์ตามเดิม)
   const map={plan:'can_plan',veh:'can_vehicles',crew:'can_staff'};
   const isAdmin=(me.role==='admin');
-  $$('.tabs button').forEach(b=>{const t=b.dataset.tab;let show=true;
+  // 1) gate แท็บย่อยตามสิทธิ์
+  $$('#subTabs button').forEach(b=>{const t=b.dataset.tab;let show=true;
     if(t==='perms')show=isAdmin;
     else if(t==='history')show=isAdmin||noMatrix||!!myPerm.can_plan||!!myPerm.can_edit_trip||!!myPerm.can_del_trip;
     else if(!noMatrix&&map[t])show=isAdmin||!!myPerm[map[t]];
-    b.style.display=show?'':'none';});
-  const active=$('.tabs button.active');
-  if(active&&active.style.display==='none'){const first=[...$$('.tabs button')].find(b=>b.style.display!=='none');if(first)first.click();}
+    b.dataset.gate=show?'1':'0';});
+  // 2) ซ่อนแท็บหลักที่ไม่มีแท็บย่อยเหลือเลย
+  $$('#mainTabs button').forEach(mb=>{
+    const any=[...$$('#subTabs button')].some(b=>b.dataset.grp===mb.dataset.main&&b.dataset.gate!=='0');
+    mb.style.display=any?'':'none';});
+  // 3) เลือกแท็บหลักที่ใช้งานได้ แล้วโชว์แท็บย่อยของมัน
+  let am=$('#mainTabs button.active');
+  if(!am||am.style.display==='none')am=[...$$('#mainTabs button')].find(b=>b.style.display!=='none');
+  if(am)showSub(am.dataset.main);
 }
 function renderPerms(){
   const host=$('#permsBody'); if(!host)return;

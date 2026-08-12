@@ -370,7 +370,16 @@ async function loadAll(){
   FLAGS={}; (fRes.data||[]).forEach(r=>FLAGS[r.key]=r.enabled);
   renderVehSelect(); renderCrewPick(); renderVehTable(); renderCrewTable(); renderPerms(); applyTabGating();
   renderDepotSelect(); renderDepotMgr(); renderTripPick(); renderHistory(); buildPlanMap();
+  applyHash();
 }
+// เปิดแท็บตาม URL เช่น admin.html#veh (รถขนส่ง), #crew (ตั้งค่าพนักงาน), #history, #perms, #plan
+function applyHash(){
+  if(!me)return;
+  const h=(location.hash||'').replace('#','');
+  const b=[...$$('#subTabs button')].find(x=>x.dataset.tab===h);
+  if(b&&b.dataset.gate!=='0')goTab(h);
+}
+window.addEventListener('hashchange',applyHash);
 /* ---------- แก้ไข trip ที่มีอยู่ ---------- */
 function renderTripPick(){
   const sel=$('#tripPick'); if(!sel)return;

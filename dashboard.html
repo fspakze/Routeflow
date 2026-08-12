@@ -152,9 +152,9 @@
         <a class="active" data-view="dash"><span class="ic">🏠</span> แดชบอร์ด</a>
         <a data-view="today"><span class="ic">🛣️</span> เส้นทางวันนี้ <span class="cnt" id="navToday">0</span></a>
         <a data-view="history"><span class="ic">🕘</span> ประวัติเส้นทาง</a>
-        <a href="admin.html"><span class="ic">🗺️</span> วางแผนเส้นทาง</a>
-        <a href="admin.html"><span class="ic">🚚</span> รถขนส่ง</a>
-        <a href="admin.html"><span class="ic">🧑‍✈️</span> พนักงานขับรถ</a>
+        <a href="admin.html#plan"><span class="ic">🗺️</span> วางแผนเส้นทาง</a>
+        <a href="admin.html#veh"><span class="ic">🚚</span> รถขนส่ง</a>
+        <a href="admin.html#crew"><span class="ic">🧑‍✈️</span> พนักงานขับรถ</a>
         <a href="stores.html"><span class="ic">🏪</span> ร้านค้าลูกค้า</a>
       </div>
       <div class="navlbl">รายงาน</div>
@@ -648,7 +648,7 @@ function renderSettings(){
           <div class="setrow"><span>ชื่อ</span><b>${esc((me&&me.full_name)||'-')}</b></div>
           <div class="setrow"><span>อีเมล</span><b>${esc((me&&me.email)||'-')}</b></div>
           <div class="setrow"><span>สิทธิ์</span><b>${esc((me&&me.role)||'-')}</b></div>
-          <div style="margin-top:10px"><a class="btn ghost sm" href="admin.html">จัดการพนักงาน →</a></div>
+          <div style="margin-top:10px"><a class="btn ghost sm" href="admin.html#crew">จัดการพนักงาน →</a></div>
         </div>
         <div class="panel"><h3>⚠️ เกณฑ์ตรวจวิ่งนอกเส้นทาง</h3>
           <label class="fl">ระยะห่างจากเส้นแผน (เมตร)</label><input type="number" id="setM" value="${OFF_M}" min="50" step="10">

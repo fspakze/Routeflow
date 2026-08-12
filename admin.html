@@ -483,6 +483,9 @@ function renderDepotSelect(){
   const sel=$('#tDepot'); if(!sel)return;
   const act=depots.filter(d=>d.is_active!==false);
   sel.innerHTML=act.map(d=>`<option value="${d.id}">${esc(d.name)}${d.lat==null?' (ยังไม่ตั้งพิกัด)':''}</option>`).join('')+'<option value="custom">📍 กำหนดเอง</option>';
+  // ค่าเริ่มต้น = คลัง Trading (ถ้ามี)
+  const def=act.find(d=>/trading/i.test(d.name||''));
+  if(def)sel.value=String(def.id);
   applyDepot();
   sel.onchange=applyDepot;
 }

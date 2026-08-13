@@ -600,8 +600,9 @@ function buildPlanMap(){
   planMap=L.map('planMap',{preferCanvas:true}).setView([15.11,105.82],13);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OSM'}).addTo(planMap);
   const counts={}; customers.forEach(c=>{const k=c.category||'(ไม่ระบุ)';counts[k]=(counts[k]||0)+1;});
-  _pcats=Object.keys(counts).sort((a,b)=>counts[b]-counts[a]); _pcounts=counts;
-  loadStyles(_pcats);
+  const freqCats=Object.keys(counts).sort((a,b)=>counts[b]-counts[a]);
+  loadStyles(freqCats);   // สีเริ่มต้นอิงความถี่ (คงที่แม้จัดลำดับใหม่)
+  _pcats=freqCats.slice().sort((a,b)=>catRank(a)-catRank(b)||counts[b]-counts[a]); _pcounts=counts;
   cluster=L.markerClusterGroup({maxClusterRadius:45});
   flatLayer=L.layerGroup();
   markerById={};
@@ -677,6 +678,19 @@ function setPlanMode(on){
 }
 
 /* ---------- marker style engine (ใช้ร่วมกับ map.html ผ่าน localStorage) ---------- */
+// ลำดับหมวดใน legend: กลุ่มลูกค้าจริงอยู่บน, กลุ่ม "ต้องสำรวจ" ลงล่างสุด
+function catRank(c){
+  c=c||'';
+  if(/friendship/i.test(c)) return 1;
+  if(/delivery\s*new/i.test(c)) return 2;
+  if(c.indexOf('ต้องสำรวจ')>=0) return 9;
+  if(c.indexOf('ร้านโชห่วย')>=0) return 3;
+  if(c.indexOf('ร้านส่ง ลูกค้า')>=0) return 4;
+  if(c.indexOf('ร้านส่ง คู่แข่ง')>=0) return 5;
+  if(c.indexOf('ตลาดดาวเรือง')>=0) return 6;
+  if(c.indexOf('ลูกค้าต่างแขวง')>=0) return 7;
+  return 8;
+}
 function defaultStyle(i){return {color:PALETTE[i%PALETTE.length],size:24,shape:'circle'};}
 function loadStyles(cats){let saved={};try{saved=JSON.parse(localStorage.getItem(STYLE_LS)||'{}');}catch(e){}
   cats.forEach((c,i)=>{styleOf[c]=Object.assign(defaultStyle(i),saved[c]||{});colorOf[c]=styleOf[c].color;});}

@@ -110,7 +110,7 @@
 <script>
 const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
 const LS={url:'rf_sb_url',key:'rf_sb_key'};
-let sb=null,me=null,rows=[],cur=null,pickMap=null,pickMarker=null,cats=[];
+let sb=null,me=null,rows=[],cur=null,pickMap=null,pickMarker=null,cats=[],stypes=[];
 
 $('#loginBtn').onclick=login;$('#password').addEventListener('keydown',e=>{if(e.key==='Enter')login();});
 
@@ -148,9 +148,10 @@ $('#logoutBtn').onclick=async()=>{await sb.auth.signOut();location.reload();};
 })();
 
 async function loadList(){
-  const{data,error}=await sb.from('customers').select('id,name,code,category,phone,address,verified').order('name').limit(5000);
+  const{data,error}=await sb.from('customers').select('id,name,code,category,store_type,phone,address,verified').order('name').limit(5000);
   if(error){toast('โหลดไม่ได้: '+error.message);return;}
   rows=data||[]; cats=[...new Set(rows.map(r=>r.category).filter(Boolean))].sort();
+  stypes=[...new Set(rows.map(r=>r.store_type).filter(Boolean))].sort();
   const cf=$('#catFilter'), prev=cf.value;
   cf.innerHTML='<option value="">— ทุกหมวด —</option>'+cats.map(c=>{
     const n=rows.filter(r=>r.category===c).length;
@@ -198,9 +199,10 @@ function renderDetail(isNew){
        ${fld('name','ชื่อร้าน *',c.name)}
        ${fld('name_alt','ชื่อสำรอง (ไทย/อังกฤษ)',c.name_alt)}
        ${fld('code','รหัส (FS-)',c.code,'text','เชื่อม Friendship')}
-       <div><label class="fl">หมวด</label><input id="f_category" list="catlist" value="${esc(c.category||'')}">
+       <div><label class="fl">หมวด (เลือก/พิมพ์เพื่อย้าย)</label><input id="f_category" list="catlist" value="${esc(c.category||'')}" placeholder="เลือกจากรายการ หรือพิมพ์หมวดใหม่" autocomplete="off">
          <datalist id="catlist">${cats.map(x=>`<option>${esc(x)}</option>`).join('')}</datalist></div>
-       ${sel('store_type','ประเภทร้าน',c.store_type,['โชห่วย','มินิมาร์ท','ร้านอาหาร','คาเฟ่','ค้าส่ง','อื่นๆ'])}
+       <div><label class="fl">ประเภทร้าน (เลือก/พิมพ์เพิ่ม)</label><input id="f_store_type" list="stypelist" value="${esc(c.store_type||'')}" placeholder="เลือกจากรายการ หรือพิมพ์ใหม่" autocomplete="off">
+         <datalist id="stypelist">${stypes.map(x=>`<option>${esc(x)}</option>`).join('')}</datalist></div>
        ${sel('size_tier','ขนาด',c.size_tier,['เล็ก','กลาง','ใหญ่'])}
      </div>
    </div>

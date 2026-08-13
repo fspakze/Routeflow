@@ -1,6 +1,6 @@
 /* RouteFlow — Service Worker (ทำให้ติดตั้งเป็นแอปได้ + shell offline)
    network-first สำหรับไฟล์ในโดเมนเรา · ปล่อยให้ Supabase/CDN วิ่งผ่านปกติ */
-const CACHE = 'routeflow-v1';
+const CACHE = 'routeflow-v2';
 const CORE = [
   './','./index.html','./dashboard.html','./admin.html','./stores.html','./map.html','./driver.html',
   './config.js','./manifest.webmanifest','./icon.svg'
@@ -18,7 +18,7 @@ self.addEventListener('fetch', e => {
   const url = new URL(req.url);
   if (url.origin !== location.origin) return;          // Supabase/CDN → เครือข่ายตามปกติ
   e.respondWith(
-    fetch(req).then(res => {
+    fetch(req, { cache: 'no-store' }).then(res => {   // ดึงไฟล์ใหม่เสมอเมื่อออนไลน์ (กันหน้าค้างเวอร์ชันเก่า)
       const copy = res.clone();
       caches.open(CACHE).then(c => c.put(req, copy)).catch(()=>{});
       return res;

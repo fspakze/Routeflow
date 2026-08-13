@@ -57,6 +57,10 @@
   .legend.collapsed{max-height:none;padding:8px 12px}
   .legend.collapsed .row{display:none}
   .legend.collapsed h4.leg-h{margin:0}
+  .legend .leg-actions{display:flex;gap:6px;margin:5px 0 6px}
+  .legend .leg-btn{flex:1;font-size:11px;padding:4px 6px;border:1px solid var(--line);border-radius:6px;background:#fff;cursor:pointer;color:var(--ink);font-weight:600}
+  .legend .leg-btn:hover{background:var(--bg)}
+  .legend.collapsed .leg-actions{display:none}
   .legend .row{display:flex;align-items:center;gap:7px;user-select:none}
   .legend .row.off{opacity:.35}
   .legend .sw{width:18px;height:18px;flex:none;display:flex;align-items:center;justify-content:center;cursor:pointer}
@@ -264,6 +268,11 @@ function renderLegend(d){
     +`<span class="leg-sub">${collapsed?_legendCats.length+' หมวด · แตะเปิด':'คลิกชื่อ=ซ่อน · ⚙=สไตล์'}</span>`;
   h.addEventListener('click',()=>{d.classList.toggle('collapsed');renderLegend(d);});
   d.appendChild(h);
+  const bar=document.createElement('div'); bar.className='leg-actions';
+  bar.innerHTML='<button class="leg-btn" data-a="all">✓ เปิดหมด</button><button class="leg-btn" data-a="none">✕ ปิดหมด</button>';
+  bar.querySelector('[data-a="all"]').onclick=()=>{hidden.clear();renderLegend(d);applyFilter();};
+  bar.querySelector('[data-a="none"]').onclick=()=>{_legendCats.forEach(c=>hidden.add(c));renderLegend(d);applyFilter();};
+  d.appendChild(bar);
   _legendCats.forEach(c=>{
     const st=styleOf[c];
     const row=document.createElement('div');

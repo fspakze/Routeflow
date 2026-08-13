@@ -87,6 +87,10 @@
   .legend .leg-sub{margin-left:auto;font-weight:400;color:var(--muted);font-size:10px}
   .legend.collapsed{max-height:none;padding:6px 10px}
   .legend.collapsed .lrow{display:none}
+  .legend .leg-actions{display:flex;gap:6px;margin:5px 0 6px}
+  .legend .leg-btn{flex:1;font-size:11px;padding:4px 6px;border:1px solid var(--line);border-radius:6px;background:#fff;cursor:pointer;color:var(--ink);font-weight:600}
+  .legend .leg-btn:hover{background:var(--bg)}
+  .legend.collapsed .leg-actions{display:none}
   /* fullscreen map toggle (มือถือปักหมุด/เลือกร้านสะดวก) */
   .map-fs{position:fixed!important;inset:0!important;width:100%!important;height:100%!important;z-index:4000;border-radius:0!important;margin:0!important}
   .map-fs-close{position:fixed;top:12px;left:12px;z-index:4001;background:#111827;color:#fff;border:0;border-radius:10px;padding:10px 16px;font-size:15px;font-weight:700;box-shadow:0 4px 14px rgba(0,0,0,.3);cursor:pointer}
@@ -650,6 +654,11 @@ function renderPlanLegend(d){
     +`<span class="leg-sub">${collapsed?_pcats.length+' หมวด · แตะเปิด':'คลิกชื่อ=ซ่อน · ⚙=สไตล์'}</span>`;
   h.addEventListener('click',()=>{d.classList.toggle('collapsed');renderPlanLegend(d);});
   d.appendChild(h);
+  const bar=document.createElement('div'); bar.className='leg-actions';
+  bar.innerHTML='<button class="leg-btn" data-a="all">✓ เปิดหมด</button><button class="leg-btn" data-a="none">✕ ปิดหมด</button>';
+  bar.querySelector('[data-a="all"]').onclick=()=>{hiddenCat.clear();applyPlanVisibility();renderPlanLegend(d);};
+  bar.querySelector('[data-a="none"]').onclick=()=>{_pcats.forEach(c=>hiddenCat.add(c));applyPlanVisibility();renderPlanLegend(d);};
+  d.appendChild(bar);
   _pcats.forEach(c=>{
     const st=styleOf[c],row=document.createElement('div');
     row.className='lrow'+(hiddenCat.has(c)?' off':'');

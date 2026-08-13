@@ -133,6 +133,8 @@ async function proceed(){
   me={id:user.id,...(prof||{})};
   $('#me').textContent=prof?`${prof.full_name} · ${prof.role}`:'(ยังไม่มี profile)';
   $('#gate').style.display='none';$('#bar').style.display='flex';$('#wrap').style.display='grid';
+  if(me.role==='viewer'){ const nb=$('#newBtn'); if(nb)nb.style.display='none';
+    $('#me').insertAdjacentHTML('beforeend',' <span style="background:#e0e7ff;color:#3730a3;padding:1px 8px;border-radius:99px;font-size:11px;font-weight:700">👁️ ดูอย่างเดียว</span>'); }
   await loadList();
   const pid=new URLSearchParams(location.search).get('id');
   if(pid) await openStore(+pid);
@@ -295,6 +297,10 @@ function renderDetail(isNew){
   setTimeout(()=>initPick(c),50);
   $('#gpsBtn').onclick=useGps;
   $('#pickFsBtn').onclick=()=>toggleMapFS(pickMap,'pickMap','pickFsBtn');
+  if(me&&me.role==='viewer'){   // โหมดดูอย่างเดียว: ซ่อนปุ่มที่เขียนข้อมูล
+    ['#saveBtn','#delBtn','#upBtn','#addOrder'].forEach(s=>{const el=$(s);if(el)el.style.display='none';});
+    const se=$('#serr'); if(se)se.textContent='👁️ โหมดดูอย่างเดียว — แก้ไข/บันทึกไม่ได้';
+  }
   $('#saveBtn').onclick=saveStore;
   if($('#delBtn'))$('#delBtn').onclick=delStore;
   if(c.id){ $('#upBtn').onclick=uploadPhoto; $('#addOrder').onclick=addOrder; loadPhotos(); loadOrders(); }

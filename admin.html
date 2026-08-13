@@ -595,10 +595,18 @@ function renderCrewPick(){
         <input type="checkbox" style="width:auto" value="${c.id}" data-role="${c.role}"> ${esc(c.full_name)} <span class="pill">${c.role}</span></label>`).join('')
     : '<span class="muted" style="font-size:13px">ยังไม่มีคนขับ/ผู้ช่วย — เพิ่มที่แท็บ ทีมงาน</span>';
 }
+// เพิ่มชั้นแผนที่ + ตัวสลับ แบบปัจจุบัน/ดาวเทียม (Esri ฟรี ไม่ต้องมี key)
+function addBaseLayers(m){
+  const streets=L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'});
+  const sat=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'Tiles © Esri'});
+  streets.addTo(m);
+  L.control.layers({'🗺️ แบบปัจจุบัน':streets,'🛰️ ดาวเทียม':sat},null,{position:'bottomleft',collapsed:true}).addTo(m);
+  return m;
+}
 function buildPlanMap(){
   if(planMap){planMap.remove();planMap=null;}
   planMap=L.map('planMap',{preferCanvas:true}).setView([15.11,105.82],13);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OSM'}).addTo(planMap);
+  addBaseLayers(planMap);
   const counts={}; customers.forEach(c=>{const k=c.category||'(ไม่ระบุ)';counts[k]=(counts[k]||0)+1;});
   const freqCats=Object.keys(counts).sort((a,b)=>counts[b]-counts[a]);
   loadStyles(freqCats);   // สีเริ่มต้นอิงความถี่ (คงที่แม้จัดลำดับใหม่)

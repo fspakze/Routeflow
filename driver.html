@@ -274,11 +274,19 @@ function bindStops(){
 }
 
 /* ---------- trip map ---------- */
+// เพิ่มชั้นแผนที่ + ตัวสลับ แบบปัจจุบัน/ดาวเทียม (Esri ฟรี ไม่ต้องมี key)
+function addBaseLayers(m){
+  const streets=L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'});
+  const sat=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'Tiles © Esri'});
+  streets.addTo(m);
+  L.control.layers({'🗺️ แบบปัจจุบัน':streets,'🛰️ ดาวเทียม':sat},null,{position:'bottomleft',collapsed:true}).addTo(m);
+  return m;
+}
 function initTripMap(){
   if(tMap){tMap.remove();tMap=null;} stopMarkers={};
   const pts=stops.filter(s=>s.customers&&s.customers.lat).map(s=>[s.customers.lat,s.customers.lng]);
   tMap=L.map('tripMap');
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OSM'}).addTo(tMap);
+  addBaseLayers(tMap);
   stops.forEach(s=>{const c=s.customers;if(!c||!c.lat)return;
     const col=s.status==='delivered'?'#0f9d58':s.status==='arrived'?'#f59e0b':'#ea580c';
     const m=L.divIcon({html:`<svg width="26" height="26" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="${col}" stroke="#fff" stroke-width="2"/><text x="12" y="16" font-size="11" font-weight="700" fill="#fff" text-anchor="middle">${s.seq}</text></svg>`,className:'',iconSize:[26,26],iconAnchor:[13,13]});

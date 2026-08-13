@@ -177,10 +177,17 @@ async function start(){
   buildMap();
 }
 
+// เพิ่มชั้นแผนที่ + ตัวสลับ แบบปัจจุบัน/ดาวเทียม (Esri ฟรี ไม่ต้องมี key)
+function addBaseLayers(m){
+  const streets=L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'});
+  const sat=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'Tiles © Esri'});
+  streets.addTo(m);
+  L.control.layers({'🗺️ แบบปัจจุบัน':streets,'🛰️ ดาวเทียม':sat},null,{position:'bottomleft',collapsed:true}).addTo(m);
+  return m;
+}
 function buildMap(){
   map = L.map('map',{preferCanvas:true}).setView([15.11,105.82],13);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-    {maxZoom:19, attribution:'© OpenStreetMap'}).addTo(map);
+  addBaseLayers(map);
 
   // assign styles by category frequency
   const counts={};

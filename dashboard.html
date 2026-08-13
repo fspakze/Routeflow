@@ -370,8 +370,15 @@ function renderTripList(){
 }
 
 /* ---------- overview map ---------- */
-function initMap(){ map=L.map('map').setView([15.11,105.82],12);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OSM'}).addTo(map);}
+// เพิ่มชั้นแผนที่ + ตัวสลับ แบบปัจจุบัน/ดาวเทียม (Esri ฟรี ไม่ต้องมี key)
+function addBaseLayers(m){
+  const streets=L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'});
+  const sat=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'Tiles © Esri'});
+  streets.addTo(m);
+  L.control.layers({'🗺️ แบบปัจจุบัน':streets,'🛰️ ดาวเทียม':sat},null,{position:'bottomleft',collapsed:true}).addTo(m);
+  return m;
+}
+function initMap(){ map=L.map('map').setView([15.11,105.82],12); addBaseLayers(map);}
 function clearLayers(){layers.forEach(l=>map.removeLayer(l));layers=[];}
 async function drawMap(){
   if(!map)return; clearLayers();
@@ -462,7 +469,7 @@ async function viewProof(path){
 }
 function drawDetailMap(t,ss,pings,off,planRoad){
   const dm=L.map('dmap').setView([15.11,105.82],12);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OSM'}).addTo(dm);
+  addBaseLayers(dm);
   const all=[];
   const plan=(planRoad&&planRoad.length>1)?planRoad:planPoints(t,ss);   // เส้นแผนตามถนนจริง
   if(plan.length>1){L.polyline(plan,{color:'#0f9d58',weight:4,opacity:.8,dashArray:'6,6'}).addTo(dm);all.push(...plan);}

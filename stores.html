@@ -298,11 +298,19 @@ function renderDetail(isNew){
   if(c.id){ $('#upBtn').onclick=uploadPhoto; $('#addOrder').onclick=addOrder; loadPhotos(); loadOrders(); }
 }
 
+// เพิ่มชั้นแผนที่ + ตัวสลับ แบบปัจจุบัน/ดาวเทียม (Esri ฟรี ไม่ต้องมี key)
+function addBaseLayers(m){
+  const streets=L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'});
+  const sat=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'Tiles © Esri'});
+  streets.addTo(m);
+  L.control.layers({'🗺️ แบบปัจจุบัน':streets,'🛰️ ดาวเทียม':sat},null,{position:'bottomleft',collapsed:true}).addTo(m);
+  return m;
+}
 function initPick(c){
   if(pickMap){pickMap.remove();pickMap=null;}
   const lat=parseFloat($('#f_lat').value)||15.115, lng=parseFloat($('#f_lng').value)||105.82;
   pickMap=L.map('pickMap').setView([lat,lng],16);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OSM'}).addTo(pickMap);
+  addBaseLayers(pickMap);
   pickMarker=L.marker([lat,lng],{draggable:true}).addTo(pickMap);
   pickMarker.on('dragend',()=>{const p=pickMarker.getLatLng();setLL(p.lat,p.lng);});
   pickMap.on('click',e=>{pickMarker.setLatLng(e.latlng);setLL(e.latlng.lat,e.latlng.lng);});

@@ -80,6 +80,10 @@
   <main id="main" style="display:none">
     <div id="vmap"></div>
     <button class="btn ghost sm" id="myLocBtn" style="width:100%;margin-bottom:10px">📍 แสดงตำแหน่งฉัน + ร้านใกล้เคียง</button>
+    <div id="mgrBar" style="display:none;margin-bottom:10px">
+      <label style="margin:0 0 4px">ดูงานของพนักงานขาย (โหมดผู้จัดการ)</label>
+      <select id="salesFilter"><option value="">— ทุกคน —</option></select>
+    </div>
     <div class="tabs" id="tabs">
       <button data-f="today" class="active">วันนี้ / ค้าง</button>
       <button data-f="upcoming">กำหนดการ</button>
@@ -147,6 +151,7 @@
 const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
 let sb=null,me=null,visits=[],customers=[],filter='today',vmap=null,vlayer=null,custLayer=null,meLayer=null,curVisit=null,pickedCust=null;
 let addMode='existing',newCoord=null;
+let isMgr=false,salesById={},salesFilter='';
 const RF_DOMAIN='routeflow.local';
 function idToEmail(v){v=(v||'').trim().toLowerCase();return v?(v.includes('@')?v:v.replace(/\s+/g,'')+'@'+RF_DOMAIN):'';}
 function esc(s){return(s==null?'':String(s)).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
@@ -173,8 +178,22 @@ async function proceed(){
   $('#me').textContent=prof?`${prof.full_name} · ${prof.role}`:'(ยังไม่มี profile)';
   $('#gate').style.display='none';$('#bar').style.display='flex';$('#main').style.display='block';
   initMap();
+  isMgr=['admin','manager','dc_head'].includes(me.role);
+  if(isMgr){
+    $('#me').insertAdjacentHTML('beforeend',' <span style="background:#dcfce7;color:#166534;padding:1px 8px;border-radius:99px;font-size:11px;font-weight:700">👀 ดูภาพรวมทีมขาย</span>');
+    const ab=$('#addBtn'); if(ab)ab.style.display='none';   // ผู้จัดการมอบหมายที่หน้า admin
+    $('#mgrBar').style.display='block';
+    await loadSalesProfiles();
+  }
   await Promise.all([loadCustomers(),loadVisits()]);
 }
+async function loadSalesProfiles(){
+  const{data}=await sb.from('profiles').select('id,full_name,role').order('full_name');
+  const all=data||[]; salesById={}; all.forEach(p=>salesById[p.id]=p.full_name);
+  const sp=all.filter(p=>p.role==='sales');
+  $('#salesFilter').innerHTML='<option value="">— ทุกคน —</option>'+sp.map(p=>`<option value="${p.id}">${esc(p.full_name)}</option>`).join('');
+}
+$('#salesFilter').addEventListener('change',()=>{salesFilter=$('#salesFilter').value;render();});
 $('#logoutBtn').onclick=async()=>{await sb.auth.signOut();location.reload();};
 (async function boot(){
   if(!(window.RF_CONFIG&&window.supabase))return;
@@ -222,9 +241,11 @@ $('#myLocBtn').onclick=()=>{
   },e=>toast('อ่านตำแหน่งไม่ได้: '+e.message),{enableHighAccuracy:true,timeout:10000});
 };
 async function loadVisits(){
-  const{data,error}=await sb.from('sales_visits')
+  let q=sb.from('sales_visits')
     .select('*, customers(id,name,code,phone,address,lat,lng,category)')
-    .eq('sales_id',me.id).order('plan_date',{ascending:true}).order('created_at',{ascending:false}).limit(500);
+    .order('plan_date',{ascending:true}).order('created_at',{ascending:false}).limit(500);
+  if(!isMgr)q=q.eq('sales_id',me.id);   // ผู้จัดการเห็นงานทุกคน (RLS อนุญาต)
+  const{data,error}=await q;
   if(error){toast('โหลดไม่ได้: '+error.message);return;}
   visits=data||[];
   render();
@@ -235,7 +256,8 @@ function statusBadge(s){const L={planned:'วางแผน',checked_in:'เช
 function render(){
   const t=today();
   let rows=visits.slice();
-  if(filter==='today')rows=rows.filter(v=>(!v.plan_date||v.plan_date<=t) && v.status!=='done');   // วันนี้ + ค้าง/เลยกำหนด
+  if(isMgr&&salesFilter)rows=rows.filter(v=>v.sales_id===salesFilter);
+  if(filter==='today')rows=rows.filter(v=>(!v.plan_date||v.plan_date<=t) && v.status!=='done');   // วันနี้ + ค้าง/เลยกำหนด
   else if(filter==='upcoming')rows=rows.filter(v=>v.plan_date && v.plan_date>t && v.status!=='done');
   else rows=rows.filter(v=>v.status==='done');
   // map markers (today planned/checked_in)
@@ -249,7 +271,7 @@ function render(){
   const host=$('#list');
   if(!rows.length){
     let hint='ไม่มีรายการ';
-    if(filter==='today'){const up=visits.filter(v=>v.plan_date&&v.plan_date>t&&v.status!=='done').length;if(up)hint=`ไม่มีงานวันนี้ · มีงานวันข้างหน้า <b>${up}</b> รายการ → ดูแท็บ "กำหนดการ"`;}
+    if(filter==='today'){const up=visits.filter(v=>(!isMgr||!salesFilter||v.sales_id===salesFilter)&&v.plan_date&&v.plan_date>t&&v.status!=='done').length;if(up)hint=`ไม่มีงานวันนี้ · มีงานวันข้างหน้า <b>${up}</b> รายการ → ดูแท็บ "กำหนดการ"`;}
     host.innerHTML='<div class="card muted" style="text-align:center">'+hint+'</div>';return;
   }
   host.innerHTML=rows.map(v=>{
@@ -266,9 +288,10 @@ function render(){
     else if(v.status==='checked_in')actions=`<button class="btn ok sm" data-form="${v.id}">📝 บันทึกผล</button>`;
     else actions=`<button class="btn ghost sm" data-form="${v.id}">แก้ไขบันทึก</button>`;
     const dist=(v.check_in_dist_m!=null)?` · ห่าง ${Math.round(v.check_in_dist_m)} ม.`:'';
+    const who=isMgr?` · 🧑‍💼 ${esc(salesById[v.sales_id]||'?')}`:'';
     return `<div class="card visit">
       <div class="top"><div class="nm">${esc(c.name||'(ร้าน)')}</div>${statusBadge(v.status)}</div>
-      <div class="meta">${esc(v.purpose||'')}${v.plan_date?' · '+v.plan_date:''}${c.phone?' · 📞 '+esc(c.phone):''}${dist}</div>
+      <div class="meta">${esc(v.purpose||'')}${v.plan_date?' · '+v.plan_date:''}${who}${c.phone?' · 📞 '+esc(c.phone):''}${dist}</div>
       ${crm}
       <div class="row" style="margin-top:4px">${actions}
         ${c.lat!=null?`<a class="btn ghost sm" href="https://www.google.com/maps/dir/?api=1&destination=${c.lat},${c.lng}" target="_blank">🧭 นำทาง</a>`:''}

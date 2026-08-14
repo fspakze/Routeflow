@@ -142,6 +142,7 @@
   </div>
   <div class="subtabs" id="subTabs" style="display:none">
     <button data-tab="plan" data-grp="plan" class="active">📋 วางแผน trip</button>
+    <button data-tab="salesplan" data-grp="plan">🧑‍💼 แผนเยี่ยมร้าน</button>
     <button data-tab="history" data-grp="plan">🕘 ประวัติเส้นทาง</button>
     <button data-tab="veh" data-grp="settings">🚚 รถขนส่ง</button>
     <button data-tab="crew" data-grp="settings">👥 ตั้งค่าพนักงาน</button>
@@ -205,6 +206,32 @@
       </div>
     </div>
 
+    <!-- SALES PLAN (แผนเยี่ยมร้าน) -->
+    <div class="pane" id="pane-salesplan">
+      <div class="card">
+        <h3>🧑‍💼 มอบหมายเยี่ยมร้าน (พนักงานขาย)</h3>
+        <div class="row" style="align-items:flex-end">
+          <div class="field" style="flex:2;min-width:220px"><label class="fl">ค้นหาร้าน (ชื่อ/รหัส/เบอร์)</label>
+            <input id="spSearch" placeholder="พิมพ์เพื่อค้นหาร้าน"><div id="spResults" style="margin-top:6px"></div>
+            <div id="spPicked" class="muted" style="font-size:13px;margin-top:4px"></div></div>
+          <div class="field"><label class="fl">พนักงานขาย</label><select id="spSales"></select></div>
+          <div class="field"><label class="fl">วันที่</label><input id="spDate" type="date"></div>
+          <div class="field"><label class="fl">วัตถุประสงค์</label>
+            <select id="spPurpose"><option>เสนอขายสินค้า</option><option>แนะนำสินค้าใหม่</option><option>ติดตามลูกค้า</option><option>เก็บเงิน</option><option>สำรวจร้าน</option><option>อื่น ๆ</option></select></div>
+          <div class="field" style="display:flex;align-items:flex-end"><button class="btn" id="spAssign">+ มอบหมาย</button></div>
+        </div>
+        <div class="err" id="spErr"></div>
+      </div>
+      <div class="card">
+        <h3>รายการเยี่ยมร้านที่กำลังจะถึง / ค้างอยู่</h3>
+        <div class="row" style="margin-bottom:8px">
+          <div class="field" style="max-width:220px"><label class="fl">กรองพนักงานขาย</label><select id="spFilter"><option value="">— ทุกคน —</option></select></div>
+          <button class="btn ghost sm" id="spReload" style="align-self:flex-end">↻ รีเฟรช</button>
+        </div>
+        <div style="overflow:auto" id="spList"></div>
+      </div>
+    </div>
+
     <!-- HISTORY (ประวัติเส้นทาง) -->
     <div class="pane" id="pane-history">
       <div class="card">
@@ -248,7 +275,7 @@
           <div class="field"><label class="fl">ชื่อ *</label><input id="uName" placeholder="ชื่อคนขับ/ผู้ช่วย"></div>
           <div class="field"><label class="fl">ไอดีเข้าระบบ *</label><input id="uEmail" type="text" autocapitalize="off" spellcheck="false" placeholder="เช่น driver01"></div>
           <div class="field"><label class="fl">รหัสผ่าน * (≥6 ตัว)</label><input id="uPass" placeholder="ตั้งให้พนักงาน"></div>
-          <div class="field"><label class="fl">ตำแหน่ง</label><select id="uRole"><option value="driver">คนขับ (driver)</option><option value="helper">ผู้ช่วย (helper)</option><option value="dc_head">หัวหน้า DC (dc_head)</option><option value="manager">ผู้จัดการ (manager)</option><option value="admin">ผู้ดูแลระบบ (admin)</option><option value="viewer">ดูอย่างเดียว (viewer)</option></select></div>
+          <div class="field"><label class="fl">ตำแหน่ง</label><select id="uRole"><option value="driver">คนขับ (driver)</option><option value="helper">ผู้ช่วย (helper)</option><option value="sales">พนักงานขาย (sales)</option><option value="dc_head">หัวหน้า DC (dc_head)</option><option value="manager">ผู้จัดการ (manager)</option><option value="admin">ผู้ดูแลระบบ (admin)</option><option value="viewer">ดูอย่างเดียว (viewer)</option></select></div>
           <div class="field"><label class="fl">เบอร์โทร</label><input id="uPhone" placeholder="020xxxxxxx"></div>
           <div class="field" style="display:flex;align-items:flex-end"><button class="btn" id="addUser">+ สร้างบัญชี</button></div>
         </div>
@@ -342,6 +369,7 @@ function activateSub(btn){
   $$('.pane').forEach(p=>p.classList.remove('active'));$('#pane-'+btn.dataset.tab).classList.add('active');
   if(btn.dataset.tab==='plan'&&planMap)setTimeout(()=>planMap.invalidateSize(),50);
   if(btn.dataset.tab==='history')renderHistory();
+  if(btn.dataset.tab==='salesplan'){renderSalesPlan();loadSalesVisits().then(renderSalesList);}
 }
 function showSub(main){
   $$('#mainTabs button').forEach(x=>x.classList.toggle('active',x.dataset.main===main));
@@ -451,6 +479,67 @@ async function delTrip(id){
 $('#histSearch').addEventListener('input',renderHistory);
 $('#histStatus').addEventListener('change',renderHistory);
 $('#histReload').onclick=()=>loadAll();
+
+/* ---------- แผนเยี่ยมร้าน (Sales CRM) ---------- */
+let salesVisits=[], spPicked=null;
+const SV_STATUS={planned:'📋 วางแผน',checked_in:'📍 เช็คอินแล้ว',done:'✅ เสร็จ',skipped:'✖ ข้าม'};
+function salesPeople(){return crew.filter(c=>c.role==='sales'&&c.is_active!==false);}
+function salesName(id){const c=crew.find(x=>x.id===id);return c?c.full_name:null;}
+async function loadSalesVisits(){
+  const{data,error}=await sb.from('sales_visits').select('*, customers(name,code)').order('plan_date',{ascending:false}).limit(500);
+  salesVisits=error?[]:(data||[]);
+}
+function renderSalesPlan(){
+  const sp=salesPeople();
+  $('#spSales').innerHTML=sp.length?sp.map(s=>`<option value="${s.id}">${esc(s.full_name)}</option>`).join(''):'<option value="">— ยังไม่มีพนักงานขาย (เพิ่มที่ ตั้งค่าพนักงาน) —</option>';
+  $('#spFilter').innerHTML='<option value="">— ทุกคน —</option>'+sp.map(s=>`<option value="${s.id}">${esc(s.full_name)}</option>`).join('');
+  if(!$('#spDate').value)$('#spDate').value=new Date().toISOString().slice(0,10);
+  renderSalesList();
+}
+function renderSalesList(){
+  const host=$('#spList');if(!host)return;
+  const f=$('#spFilter').value;
+  let rows=salesVisits.filter(v=>v.status!=='done');
+  if(f)rows=rows.filter(v=>v.sales_id===f);
+  if(!rows.length){host.innerHTML='<div class="muted">ไม่มีรายการค้าง</div>';return;}
+  host.innerHTML=`<table><tr><th>วันที่</th><th>ร้าน</th><th>พนักงานขาย</th><th>วัตถุประสงค์</th><th>สถานะ</th><th></th></tr>
+    ${rows.map(v=>`<tr>
+      <td>${esc(v.plan_date||'-')}</td>
+      <td><b>${esc(v.customers?v.customers.name:'-')}</b></td>
+      <td>${esc(salesName(v.sales_id)||'-')}</td>
+      <td>${esc(v.purpose||'-')}</td>
+      <td>${SV_STATUS[v.status]||esc(v.status)}</td>
+      <td><button class="btn ghost sm" data-svdel="${v.id}" style="color:var(--bad)">ลบ</button></td>
+    </tr>`).join('')}</table>`;
+  host.querySelectorAll('[data-svdel]').forEach(b=>b.onclick=()=>delSalesVisit(+b.dataset.svdel));
+}
+$('#spSearch').addEventListener('input',()=>{
+  const q=$('#spSearch').value.trim().toLowerCase(),box=$('#spResults'),digits=q.replace(/\D/g,'');
+  if(!q){box.innerHTML='';return;}
+  const res=customers.filter(c=>(c.name||'').toLowerCase().includes(q)||(c.code||'').toLowerCase().includes(q)||(digits.length>=3&&(c.phone||'').replace(/\D/g,'').includes(digits))).slice(0,10);
+  box.innerHTML=res.map(c=>`<div class="stop" data-sp="${c.id}" style="cursor:pointer"><span class="nm">${esc(c.name)}${c.code?' · '+esc(c.code):''}${c.phone?' · 📞 '+esc(c.phone):''}</span></div>`).join('')||'<div class="muted" style="font-size:13px">ไม่พบร้าน</div>';
+  box.querySelectorAll('[data-sp]').forEach(el=>el.onclick=()=>{spPicked=customers.find(x=>String(x.id)===el.dataset.sp);$('#spPicked').innerHTML='เลือก: <b>'+esc(spPicked.name)+'</b>';box.innerHTML='';});
+});
+$('#spAssign').onclick=async()=>{
+  $('#spErr').textContent='';
+  if(!spPicked){$('#spErr').textContent='ค้นหาแล้วเลือกร้านก่อน';return;}
+  const sid=$('#spSales').value;if(!sid){$('#spErr').textContent='เลือกพนักงานขาย';return;}
+  const rec={customer_id:spPicked.id,sales_id:sid,plan_date:$('#spDate').value||new Date().toISOString().slice(0,10),purpose:$('#spPurpose').value,status:'planned',created_by:me.id};
+  $('#spAssign').disabled=true;
+  const{error}=await sb.from('sales_visits').insert(rec);
+  $('#spAssign').disabled=false;
+  if(error){$('#spErr').textContent='มอบหมายไม่สำเร็จ: '+error.message;return;}
+  toast('✅ มอบหมาย '+spPicked.name+' แล้ว');spPicked=null;$('#spPicked').textContent='';$('#spSearch').value='';$('#spResults').innerHTML='';
+  await loadSalesVisits();renderSalesList();
+};
+$('#spFilter').addEventListener('change',renderSalesList);
+$('#spReload').onclick=async()=>{await loadSalesVisits();renderSalesList();};
+async function delSalesVisit(id){
+  if(!confirm('ลบการมอบหมายนี้?'))return;
+  const{error}=await sb.from('sales_visits').delete().eq('id',id);
+  if(error){toast('ลบไม่ได้: '+error.message);return;}
+  toast('ลบแล้ว');await loadSalesVisits();renderSalesList();
+}
 async function loadTripForEdit(id){
   const t=allTrips.find(x=>x.id===id); if(!t)return;
   editTripId=id;
@@ -551,6 +640,7 @@ function applyTabGating(){
   // 1) gate แท็บย่อยตามสิทธิ์
   $$('#subTabs button').forEach(b=>{const t=b.dataset.tab;let show=true;
     if(t==='perms')show=isAdmin;
+    else if(t==='salesplan')show=isAdmin||noMatrix||!!myPerm.can_plan;
     else if(t==='history')show=isAdmin||noMatrix||!!myPerm.can_plan||!!myPerm.can_edit_trip||!!myPerm.can_del_trip;
     else if(!noMatrix&&map[t])show=isAdmin||!!myPerm[map[t]];
     b.dataset.gate=show?'1':'0';});
@@ -954,8 +1044,8 @@ $('#addUser').onclick=async()=>{
   }
   $('#addUser').disabled=false;$('#addUser').textContent='+ สร้างบัญชี';
 };
-const ROLES=['admin','manager','dc_head','driver','helper','viewer'];
-const ROLE_LABEL={admin:'ผู้ดูแลระบบ',manager:'ผู้จัดการ',dc_head:'หัวหน้า DC',driver:'คนขับ',helper:'ผู้ช่วย',viewer:'ดูอย่างเดียว'};
+const ROLES=['admin','manager','dc_head','sales','driver','helper','viewer'];
+const ROLE_LABEL={admin:'ผู้ดูแลระบบ',manager:'ผู้จัดการ',dc_head:'หัวหน้า DC',sales:'พนักงานขาย',driver:'คนขับ',helper:'ผู้ช่วย',viewer:'ดูอย่างเดียว'};
 const PERMS=[['can_dashboard','แดชบอร์ด'],['can_plan','วางแผน trip'],['can_stores','จัดการร้าน'],['can_vehicles','จัดการรถ'],['can_reports','รายงาน'],['can_staff','จัดการพนักงาน'],['can_driver_app','แอปคนขับ'],['can_edit_trip','แก้ประวัติเส้นทาง'],['can_del_trip','ลบประวัติเส้นทาง']];
 let perms={}, myPerm={}, FLAGS={};
 function renderCrewTable(){

@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+<link rel="manifest" href="manifest-sales.webmanifest" />
+<meta name="theme-color" content="#ea580c" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-title" content="RouteFlow ขาย" />
+<link rel="apple-touch-icon" href="icon.svg" />
+<link rel="icon" href="icon.svg" />
+<title>RouteFlow — พนักงานขาย / เยี่ยมร้าน</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+  :root{--bg:#fff7ed;--card:#fff;--line:#fed7aa;--ink:#1f2937;--muted:#6b7280;--brand:#ea580c;--ok:#0f9d58;--warn:#f59e0b;--bad:#dc2626;--info:#3730a3}
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;font-family:"Segoe UI","Noto Sans Lao","Noto Sans Thai",system-ui,sans-serif;color:var(--ink);background:var(--bg)}
+  #app{min-height:100%;display:flex;flex-direction:column}
+  #gate{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#fff7ed,#ffedd5);z-index:2000;padding:16px}
+  #gate .box{background:var(--card);border:1px solid var(--line);border-radius:16px;max-width:400px;width:100%;padding:24px;box-shadow:0 10px 40px rgba(234,88,12,.12)}
+  #gate h1{margin:0 0 4px;font-size:20px}#gate p{margin:0 0 16px;color:var(--muted);font-size:13px}
+  label{display:block;font-size:12px;color:var(--muted);margin:8px 0 4px}
+  input,select,textarea{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;font-size:14px;outline:none;background:#fff;font-family:inherit}
+  input:focus,select:focus,textarea:focus{border-color:var(--brand)}
+  #gate button{width:100%;margin-top:16px;padding:12px;border:0;border-radius:10px;background:var(--brand);color:#fff;font-size:15px;font-weight:700;cursor:pointer}
+  .err{color:var(--bad);font-size:13px;margin-top:8px;min-height:16px}
+  header{display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--card);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:500;flex-wrap:wrap}
+  header .logo{font-weight:800;color:var(--brand);font-size:16px;text-decoration:none}
+  header .me{font-size:12px;color:var(--muted);margin-left:auto}
+  .btn{padding:10px 16px;border:0;border-radius:10px;background:var(--brand);color:#fff;font-weight:700;cursor:pointer;font-size:14px}
+  .btn.ghost{background:#fff;border:1px solid var(--line);color:var(--ink);font-weight:600}
+  .btn.sm{padding:7px 12px;font-size:13px}
+  .btn.ok{background:var(--ok)}.btn.warn{background:var(--warn)}
+  a.btn{text-decoration:none;display:inline-block}
+  main{flex:1;padding:14px;max-width:760px;width:100%;margin:0 auto}
+  .tabs{display:flex;gap:6px;margin-bottom:12px}
+  .tabs button{flex:1;padding:9px;border:1px solid var(--line);background:#fff;border-radius:10px;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer}
+  .tabs button.active{background:var(--brand);color:#fff;border-color:var(--brand)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px}
+  .visit{display:flex;flex-direction:column;gap:6px}
+  .visit .top{display:flex;align-items:flex-start;gap:8px}
+  .visit .nm{font-weight:700;font-size:15px;flex:1}
+  .visit .meta{font-size:12px;color:var(--muted)}
+  .badge{font-size:11px;padding:2px 9px;border-radius:99px;font-weight:700;white-space:nowrap}
+  .b-planned{background:#e0e7ff;color:#3730a3}.b-checked_in{background:#fef3c7;color:#92400e}.b-done{background:#dcfce7;color:#166534}.b-skipped{background:#f3f4f6;color:#6b7280}
+  .row{display:flex;gap:8px;flex-wrap:wrap}
+  .row>*{flex:1;min-width:120px}
+  .crm{font-size:13px;line-height:1.6;border-top:1px dashed var(--line);margin-top:6px;padding-top:6px}
+  .crm b{color:var(--brand)}
+  .muted{color:var(--muted)}
+  .modal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:flex-end;justify-content:center;z-index:1500;padding:0}
+  .modal.open{display:flex}
+  .sheet{background:#fff;width:100%;max-width:640px;border-radius:16px 16px 0 0;padding:16px;max-height:92vh;overflow:auto}
+  .sheet h3{margin:0 0 10px;font-size:16px}
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#111827;color:#fff;padding:11px 18px;border-radius:10px;font-size:14px;z-index:3000;opacity:0;transition:.3s;pointer-events:none;text-align:center;max-width:90%}
+  .toast.show{opacity:1}
+  #vmap{height:220px;border-radius:12px;border:1px solid var(--line);margin-bottom:12px}
+  .clist{max-height:46vh;overflow:auto;border:1px solid var(--line);border-radius:10px;margin-top:6px}
+  .citem{padding:9px 12px;border-bottom:1px solid #f3e8dd;cursor:pointer;font-size:14px}
+  .citem:hover{background:var(--bg)}
+  @media(max-width:700px){.btn,input,select,textarea{min-height:46px}.btn.sm{min-height:38px}}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="gate"><div class="box">
+    <h1>🧑‍💼 พนักงานขาย</h1><p>เข้าสู่ระบบเพื่อดูแผนเยี่ยมร้าน / เช็คอิน</p>
+    <label>ไอดี หรือ อีเมล</label><input id="email" type="text" autocapitalize="off" spellcheck="false" autocomplete="username">
+    <label>รหัสผ่าน</label><input id="password" type="password" autocomplete="current-password">
+    <button id="loginBtn">เข้าสู่ระบบ</button>
+    <div class="err" id="gerr"></div>
+  </div></div>
+
+  <header style="display:none" id="bar">
+    <a href="index.html" class="logo" title="กลับหน้าหลัก">🧑‍💼 RouteFlow ขาย</a>
+    <span class="me" id="me"></span>
+    <button class="btn ghost sm" id="logoutBtn">ออก</button>
+  </header>
+
+  <main id="main" style="display:none">
+    <div id="vmap"></div>
+    <div class="tabs" id="tabs">
+      <button data-f="today" class="active">วันนี้</button>
+      <button data-f="upcoming">กำหนดการ</button>
+      <button data-f="done">เสร็จแล้ว</button>
+    </div>
+    <button class="btn" id="addBtn" style="width:100%;margin-bottom:12px">➕ เพิ่มการเข้าพบ (เดินเข้าพบเอง)</button>
+    <div id="list"></div>
+  </main>
+</div>
+
+<!-- Visit form -->
+<div class="modal" id="formModal"><div class="sheet">
+  <h3 id="formTitle">บันทึกการเข้าพบ</h3>
+  <div id="formStore" class="muted" style="font-size:13px;margin-bottom:8px"></div>
+  <label>ผลการเข้าพบ</label>
+  <select id="f_result"><option value="">— เลือก —</option><option>ขายได้</option><option>สนใจ (ติดตามต่อ)</option><option>ขอคิดดูก่อน</option><option>ปฏิเสธ</option><option>ไม่พบ/ปิดร้าน</option></select>
+  <label>ยอดขาย (ถ้ามี)</label><input id="f_order_amount" type="number" inputmode="decimal" placeholder="บาท / กีบ">
+  <label>สิ่งที่ได้จากลูกค้า / ที่สนใจ</label><textarea id="f_interest" rows="2" placeholder="สินค้าที่สนใจ, ความต้องการ"></textarea>
+  <label>Feedback / ข้อเสนอแนะ</label><textarea id="f_feedback" rows="2" placeholder="ความเห็น/ข้อเสนอแนะจากลูกค้า"></textarea>
+  <label>สิ่งที่ตกลงไว้ / ต้องทำครั้งหน้า</label><textarea id="f_next_action" rows="2" placeholder="เช่น ส่งตัวอย่าง, เสนอราคา, นำใบเสนอราคา"></textarea>
+  <label>นัดหมายครั้งต่อไป</label><input id="f_next_visit_date" type="date">
+  <label>หมายเหตุ</label><input id="f_note">
+  <div class="row" style="margin-top:14px">
+    <button class="btn ghost" id="formCancel">ยกเลิก</button>
+    <button class="btn ok" id="formSave">💾 บันทึก & จบการเข้าพบ</button>
+  </div>
+  <div class="err" id="formErr"></div>
+</div></div>
+
+<!-- Add walk-in visit -->
+<div class="modal" id="addModal"><div class="sheet">
+  <h3>เพิ่มการเข้าพบ</h3>
+  <label>ค้นหาร้าน (ชื่อ/รหัส/เบอร์)</label><input id="addSearch" placeholder="พิมพ์เพื่อค้นหา">
+  <div class="clist" id="addList"></div>
+  <div id="addPicked" class="muted" style="font-size:13px;margin-top:8px"></div>
+  <label>วัตถุประสงค์</label>
+  <select id="a_purpose"><option>เสนอขายสินค้า</option><option>แนะนำสินค้าใหม่</option><option>ติดตามลูกค้า</option><option>เก็บเงิน</option><option>สำรวจร้าน</option><option>อื่น ๆ</option></select>
+  <label>วันที่ (ปล่อยว่าง = วันนี้)</label><input id="a_date" type="date">
+  <div class="row" style="margin-top:14px">
+    <button class="btn ghost" id="addCancel">ยกเลิก</button>
+    <button class="btn" id="addSave">เพิ่ม</button>
+  </div>
+  <div class="err" id="addErr"></div>
+</div></div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script>
+const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
+let sb=null,me=null,visits=[],customers=[],filter='today',vmap=null,vlayer=null,curVisit=null,pickedCust=null;
+const RF_DOMAIN='routeflow.local';
+function idToEmail(v){v=(v||'').trim().toLowerCase();return v?(v.includes('@')?v:v.replace(/\s+/g,'')+'@'+RF_DOMAIN):'';}
+function esc(s){return(s==null?'':String(s)).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
+let tT;function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('show');clearTimeout(tT);tT=setTimeout(()=>t.classList.remove('show'),2800);}
+const today=()=>new Date().toISOString().slice(0,10);
+function haversine(a,b,c,d){const R=6371000,r=x=>x*Math.PI/180;const dLa=r(c-a),dLo=r(d-b);const s=Math.sin(dLa/2)**2+Math.cos(r(a))*Math.cos(r(c))*Math.sin(dLo/2)**2;return 2*R*Math.asin(Math.sqrt(s));}
+
+$('#loginBtn').onclick=login;$('#password').addEventListener('keydown',e=>{if(e.key==='Enter')login();});
+async function login(){
+  const url=window.RF_CONFIG&&RF_CONFIG.url,key=window.RF_CONFIG&&RF_CONFIG.anonKey,email=idToEmail($('#email').value),pw=$('#password').value;
+  $('#gerr').textContent='';if(!url||!key){$('#gerr').textContent='config.js ไม่ถูกโหลด';return;}
+  if(!email||!pw){$('#gerr').textContent='กรอกไอดี+รหัสผ่าน';return;}
+  $('#loginBtn').disabled=true;$('#loginBtn').textContent='กำลังเข้า...';
+  try{
+    sb=sb||supabase.createClient(url,key);
+    const{error}=await sb.auth.signInWithPassword({email,password:pw});if(error)throw error;
+    await proceed();
+  }catch(e){$('#gerr').textContent='เข้าไม่สำเร็จ: '+(e.message||e);$('#loginBtn').disabled=false;$('#loginBtn').textContent='เข้าสู่ระบบ';}
+}
+async function proceed(){
+  const{data:{user}}=await sb.auth.getUser();
+  const{data:prof}=await sb.from('profiles').select('full_name,role').eq('id',user.id).maybeSingle();
+  me={id:user.id,...(prof||{})};
+  $('#me').textContent=prof?`${prof.full_name} · ${prof.role}`:'(ยังไม่มี profile)';
+  $('#gate').style.display='none';$('#bar').style.display='flex';$('#main').style.display='block';
+  initMap();
+  await Promise.all([loadCustomers(),loadVisits()]);
+}
+$('#logoutBtn').onclick=async()=>{await sb.auth.signOut();location.reload();};
+(async function boot(){
+  if(!(window.RF_CONFIG&&window.supabase))return;
+  let had=false;try{had=Object.keys(localStorage).some(k=>k.indexOf('sb-')===0&&k.indexOf('-auth-token')>0);}catch(e){}
+  if(had){const g=$('#gate');if(g)g.style.display='none';}
+  sb=sb||supabase.createClient(RF_CONFIG.url,RF_CONFIG.anonKey);
+  try{const{data:{session}}=await sb.auth.getSession();if(session){await proceed();return;}}catch(e){}
+  const g=$('#gate');if(g)g.style.display='';
+})();
+
+function initMap(){
+  if(vmap)return;
+  vmap=L.map('vmap').setView([15.11,105.82],13);
+  const streets=L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'});
+  const sat=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'Tiles © Esri'});
+  streets.addTo(vmap);
+  L.control.layers({'🗺️ แบบปัจจุบัน':streets,'🛰️ ดาวเทียม':sat},null,{position:'bottomleft',collapsed:true}).addTo(vmap);
+  vlayer=L.layerGroup().addTo(vmap);
+}
+async function loadCustomers(){
+  const{data}=await sb.from('customers').select('id,name,code,category,phone,lat,lng').not('lat','is',null).limit(5000);
+  customers=data||[];
+}
+async function loadVisits(){
+  const{data,error}=await sb.from('sales_visits')
+    .select('*, customers(id,name,code,phone,address,lat,lng,category)')
+    .eq('sales_id',me.id).order('plan_date',{ascending:true}).order('created_at',{ascending:false}).limit(500);
+  if(error){toast('โหลดไม่ได้: '+error.message);return;}
+  visits=data||[];
+  render();
+}
+$$('#tabs button').forEach(b=>b.onclick=()=>{filter=b.dataset.f;$$('#tabs button').forEach(x=>x.classList.remove('active'));b.classList.add('active');render();});
+
+function statusBadge(s){const L={planned:'วางแผน',checked_in:'เช็คอินแล้ว',done:'เสร็จ',skipped:'ข้าม'};return `<span class="badge b-${s}">${L[s]||s}</span>`;}
+function render(){
+  const t=today();
+  let rows=visits.slice();
+  if(filter==='today')rows=rows.filter(v=>(v.plan_date||'')===t && v.status!=='done');
+  else if(filter==='upcoming')rows=rows.filter(v=>(v.plan_date||'')>t && v.status!=='done');
+  else rows=rows.filter(v=>v.status==='done');
+  // map markers (today planned/checked_in)
+  if(vlayer){vlayer.clearLayers();const pts=[];
+    rows.forEach(v=>{const c=v.customers;if(!c||c.lat==null)return;
+      const col=v.status==='done'?'#0f9d58':v.status==='checked_in'?'#f59e0b':'#ea580c';
+      L.circleMarker([c.lat,c.lng],{radius:7,color:'#fff',weight:2,fillColor:col,fillOpacity:1}).bindTooltip(c.name).addTo(vlayer);
+      pts.push([c.lat,c.lng]);});
+    if(pts.length)try{vmap.fitBounds(pts,{padding:[30,30],maxZoom:15});}catch(e){}
+  }
+  const host=$('#list');
+  if(!rows.length){host.innerHTML='<div class="card muted" style="text-align:center">ไม่มีรายการ</div>';return;}
+  host.innerHTML=rows.map(v=>{
+    const c=v.customers||{};
+    const crm=(v.status==='done')?`<div class="crm">
+        ${v.result?`ผล: <b>${esc(v.result)}</b> `:''}${v.order_amount?`· ยอด ${(+v.order_amount).toLocaleString()} `:''}
+        ${v.interest?`<div>สนใจ: ${esc(v.interest)}</div>`:''}
+        ${v.feedback?`<div>Feedback: ${esc(v.feedback)}</div>`:''}
+        ${v.next_action?`<div>ตกลงไว้: <b>${esc(v.next_action)}</b></div>`:''}
+        ${v.next_visit_date?`<div>นัดครั้งหน้า: <b>${esc(v.next_visit_date)}</b></div>`:''}
+      </div>`:'';
+    let actions='';
+    if(v.status==='planned')actions=`<button class="btn warn sm" data-checkin="${v.id}">📍 เช็คอิน</button><button class="btn ghost sm" data-skip="${v.id}">ข้าม</button>`;
+    else if(v.status==='checked_in')actions=`<button class="btn ok sm" data-form="${v.id}">📝 บันทึกผล</button>`;
+    else actions=`<button class="btn ghost sm" data-form="${v.id}">แก้ไขบันทึก</button>`;
+    const dist=(v.check_in_dist_m!=null)?` · ห่าง ${Math.round(v.check_in_dist_m)} ม.`:'';
+    return `<div class="card visit">
+      <div class="top"><div class="nm">${esc(c.name||'(ร้าน)')}</div>${statusBadge(v.status)}</div>
+      <div class="meta">${esc(v.purpose||'')}${v.plan_date?' · '+v.plan_date:''}${c.phone?' · 📞 '+esc(c.phone):''}${dist}</div>
+      ${crm}
+      <div class="row" style="margin-top:4px">${actions}
+        ${c.lat!=null?`<a class="btn ghost sm" href="https://www.google.com/maps/dir/?api=1&destination=${c.lat},${c.lng}" target="_blank">🧭 นำทาง</a>`:''}
+      </div>
+    </div>`;
+  }).join('');
+  host.querySelectorAll('[data-checkin]').forEach(b=>b.onclick=()=>checkIn(+b.dataset.checkin));
+  host.querySelectorAll('[data-form]').forEach(b=>b.onclick=()=>openForm(+b.dataset.form));
+  host.querySelectorAll('[data-skip]').forEach(b=>b.onclick=()=>setSkip(+b.dataset.skip));
+}
+
+function checkIn(id){
+  const v=visits.find(x=>x.id===id);if(!v)return;const c=v.customers||{};
+  if(!navigator.geolocation){toast('อุปกรณ์ไม่รองรับ GPS');return;}
+  toast('กำลังหาตำแหน่ง...');
+  navigator.geolocation.getCurrentPosition(async p=>{
+    const lat=p.coords.latitude,lng=p.coords.longitude;
+    let dist=null;if(c.lat!=null)dist=haversine(lat,lng,c.lat,c.lng);
+    const upd={status:'checked_in',check_in_at:new Date().toISOString(),check_in_lat:lat,check_in_lng:lng,check_in_dist_m:dist,updated_at:new Date().toISOString()};
+    const{error}=await sb.from('sales_visits').update(upd).eq('id',id);
+    if(error){toast('เช็คอินไม่สำเร็จ: '+error.message);return;}
+    Object.assign(v,upd);
+    toast(dist!=null&&dist>250?`เช็คอินแล้ว (ห่างร้าน ${Math.round(dist)} ม.)`:'✅ เช็คอินแล้ว');
+    render(); openForm(id);
+  },e=>toast('อ่านตำแหน่งไม่ได้: '+e.message),{enableHighAccuracy:true,timeout:10000});
+}
+async function setSkip(id){
+  if(!confirm('ข้ามการเข้าพบร้านนี้?'))return;
+  const{error}=await sb.from('sales_visits').update({status:'skipped',updated_at:new Date().toISOString()}).eq('id',id);
+  if(error){toast('ไม่สำเร็จ: '+error.message);return;}
+  const v=visits.find(x=>x.id===id);if(v)v.status='skipped';toast('ข้ามแล้ว');render();
+}
+
+/* ----- visit form ----- */
+function openForm(id){
+  curVisit=visits.find(x=>x.id===id);if(!curVisit)return;
+  const c=curVisit.customers||{};
+  $('#formStore').textContent=(c.name||'')+(curVisit.purpose?' · '+curVisit.purpose:'');
+  $('#f_result').value=curVisit.result||'';
+  $('#f_order_amount').value=curVisit.order_amount??'';
+  $('#f_interest').value=curVisit.interest||'';
+  $('#f_feedback').value=curVisit.feedback||'';
+  $('#f_next_action').value=curVisit.next_action||'';
+  $('#f_next_visit_date').value=curVisit.next_visit_date||'';
+  $('#f_note').value=curVisit.note||'';
+  $('#formErr').textContent='';
+  $('#formModal').classList.add('open');
+}
+$('#formCancel').onclick=()=>$('#formModal').classList.remove('open');
+$('#formSave').onclick=async()=>{
+  if(!curVisit)return;
+  const upd={
+    status:'done',check_out_at:new Date().toISOString(),
+    result:$('#f_result').value||null,
+    order_amount:$('#f_order_amount').value?+$('#f_order_amount').value:null,
+    interest:$('#f_interest').value.trim()||null,
+    feedback:$('#f_feedback').value.trim()||null,
+    next_action:$('#f_next_action').value.trim()||null,
+    next_visit_date:$('#f_next_visit_date').value||null,
+    note:$('#f_note').value.trim()||null,
+    updated_at:new Date().toISOString()
+  };
+  if(curVisit.status==='planned'){upd.check_in_at=upd.check_in_at||new Date().toISOString();}
+  $('#formSave').disabled=true;$('#formSave').textContent='กำลังบันทึก...';
+  const{error}=await sb.from('sales_visits').update(upd).eq('id',curVisit.id);
+  $('#formSave').disabled=false;$('#formSave').textContent='💾 บันทึก & จบการเข้าพบ';
+  if(error){$('#formErr').textContent='บันทึกไม่สำเร็จ: '+error.message;return;}
+  Object.assign(curVisit,upd);
+  $('#formModal').classList.remove('open');toast('✅ บันทึกการเข้าพบแล้ว');render();
+};
+
+/* ----- add walk-in visit ----- */
+$('#addBtn').onclick=()=>{pickedCust=null;$('#addPicked').textContent='';$('#addSearch').value='';$('#addList').innerHTML='';$('#a_date').value='';$('#addErr').textContent='';$('#addModal').classList.add('open');};
+$('#addCancel').onclick=()=>$('#addModal').classList.remove('open');
+$('#addSearch').addEventListener('input',()=>{
+  const q=$('#addSearch').value.trim().toLowerCase();const digits=q.replace(/\D/g,'');
+  if(!q){$('#addList').innerHTML='';return;}
+  const res=customers.filter(c=>(c.name||'').toLowerCase().includes(q)||(c.code||'').toLowerCase().includes(q)||(digits.length>=3&&(c.phone||'').replace(/\D/g,'').includes(digits))).slice(0,20);
+  $('#addList').innerHTML=res.map(c=>`<div class="citem" data-id="${c.id}">${esc(c.name)}${c.code?' · '+esc(c.code):''}${c.phone?' · 📞'+esc(c.phone):''}</div>`).join('')||'<div class="citem muted">ไม่พบร้าน</div>';
+  $('#addList').querySelectorAll('[data-id]').forEach(el=>el.onclick=()=>{pickedCust=customers.find(x=>String(x.id)===el.dataset.id);$('#addPicked').innerHTML='เลือก: <b>'+esc(pickedCust.name)+'</b>';});
+});
+$('#addSave').onclick=async()=>{
+  if(!pickedCust){$('#addErr').textContent='เลือกร้านก่อน';return;}
+  const rec={customer_id:pickedCust.id,sales_id:me.id,plan_date:$('#a_date').value||today(),purpose:$('#a_purpose').value,status:'planned',created_by:me.id};
+  $('#addSave').disabled=true;
+  const{error}=await sb.from('sales_visits').insert(rec);
+  $('#addSave').disabled=false;
+  if(error){$('#addErr').textContent='เพิ่มไม่สำเร็จ: '+error.message;return;}
+  $('#addModal').classList.remove('open');toast('✅ เพิ่มการเข้าพบแล้ว');await loadVisits();
+};
+</script>
+<script>if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js').catch(function(){});</script>
+</body>
+</html>

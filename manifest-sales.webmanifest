@@ -1,0 +1,10 @@
+{
+  "name": "RouteFlow พนักงานขาย",
+  "short_name": "RF ขาย",
+  "start_url": "sales.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#fff7ed",
+  "theme_color": "#ea580c",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

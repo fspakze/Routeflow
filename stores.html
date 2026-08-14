@@ -292,6 +292,11 @@ function renderDetail(isNew){
      </div>
      <div style="margin-top:6px"><input id="f_oNote" placeholder="สรุปสินค้า (ถ้ามี)"></div>
      <div id="orders" style="margin-top:10px"></div>
+   </div>
+
+   <div class="card">
+     <h3>🧑‍💼 ประวัติการเข้าพบ (Sales / CRM)</h3>
+     <div id="crmList"><span class="muted">กำลังโหลด...</span></div>
    </div>`:''}
   `;
   setTimeout(()=>initPick(c),50);
@@ -303,7 +308,23 @@ function renderDetail(isNew){
   }
   $('#saveBtn').onclick=saveStore;
   if($('#delBtn'))$('#delBtn').onclick=delStore;
-  if(c.id){ $('#upBtn').onclick=uploadPhoto; $('#addOrder').onclick=addOrder; loadPhotos(); loadOrders(); }
+  if(c.id){ $('#upBtn').onclick=uploadPhoto; $('#addOrder').onclick=addOrder; loadPhotos(); loadOrders(); loadCRM(); }
+}
+async function loadCRM(){
+  const el=$('#crmList'); if(!el)return;
+  const{data,error}=await sb.from('sales_visits').select('*').eq('customer_id',cur.id).order('plan_date',{ascending:false}).order('created_at',{ascending:false}).limit(50);
+  if(error){el.innerHTML='<span class="muted">โหลดไม่ได้ (ยังไม่ได้รัน sales_crm.sql?)</span>';return;}
+  if(!data.length){el.innerHTML='<span class="muted">ยังไม่มีประวัติการเข้าพบ</span>';return;}
+  const SV={planned:'วางแผน',checked_in:'เช็คอิน',done:'เสร็จ',skipped:'ข้าม'};
+  const t=new Date().toISOString().slice(0,10);
+  const next=data.find(v=>v.next_visit_date&&v.next_visit_date>=t);
+  el.innerHTML=(next?`<div style="background:#fff7ed;border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-bottom:8px;font-size:13px">📅 นัดครั้งหน้า: <b>${esc(next.next_visit_date)}</b>${next.next_action?' — '+esc(next.next_action):''}</div>`:'')
+    + data.map(v=>`<div class="ordrow" style="flex-direction:column;align-items:stretch;gap:2px">
+      <div><b>${esc(v.plan_date||'')}</b> <span class="badge">${SV[v.status]||esc(v.status)}</span>${v.result?' · '+esc(v.result):''}${v.order_amount?' · ยอด '+(+v.order_amount).toLocaleString():''}</div>
+      ${v.interest?`<div class="muted" style="font-size:12px">สนใจ: ${esc(v.interest)}</div>`:''}
+      ${v.feedback?`<div class="muted" style="font-size:12px">Feedback: ${esc(v.feedback)}</div>`:''}
+      ${v.next_action?`<div class="muted" style="font-size:12px">ตกลงไว้: ${esc(v.next_action)}</div>`:''}
+    </div>`).join('');
 }
 
 // เพิ่มชั้นแผนที่ + ตัวสลับ แบบปัจจุบัน/ดาวเทียม (Esri ฟรี ไม่ต้องมี key)

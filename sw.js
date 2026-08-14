@@ -1,9 +1,9 @@
 /* RouteFlow — Service Worker (ทำให้ติดตั้งเป็นแอปได้ + shell offline)
    network-first สำหรับไฟล์ในโดเมนเรา · ปล่อยให้ Supabase/CDN วิ่งผ่านปกติ */
-const CACHE = 'routeflow-v2';
+const CACHE = 'routeflow-v3';
 const CORE = [
-  './','./index.html','./dashboard.html','./admin.html','./stores.html','./map.html','./driver.html',
-  './config.js','./manifest.webmanifest','./icon.svg'
+  './','./index.html','./dashboard.html','./admin.html','./stores.html','./map.html','./driver.html','./sales.html',
+  './config.js','./manifest.webmanifest','./manifest-sales.webmanifest','./icon.svg'
 ];
 
 self.addEventListener('install', e => {

@@ -68,6 +68,9 @@
   .stop .mv{cursor:pointer;color:var(--muted);padding:0 3px}
   .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#111827;color:#fff;padding:10px 18px;border-radius:10px;font-size:14px;z-index:3000;opacity:0;transition:.3s;pointer-events:none}
   .toast.show{opacity:1}
+  .rf-modal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;z-index:2500;padding:14px}
+  .rf-modal.open{display:flex}
+  .rf-sheet{background:#fff;border-radius:14px;padding:16px;max-width:560px;width:100%;max-height:92vh;overflow:auto}
   @media(max-width:820px){#planWrap{grid-template-columns:1fr}#planMap{height:340px}}
   #vehTable,#crewTable,#permsBody{overflow-x:auto}
   @media(max-width:700px){
@@ -143,6 +146,7 @@
   <div class="subtabs" id="subTabs" style="display:none">
     <button data-tab="plan" data-grp="plan" class="active">📋 วางแผน trip</button>
     <button data-tab="salesplan" data-grp="plan">🧑‍💼 แผนเยี่ยมร้าน</button>
+    <button data-tab="visithistory" data-grp="plan">📖 ประวัติเยี่ยมร้าน</button>
     <button data-tab="history" data-grp="plan">🕘 ประวัติเส้นทาง</button>
     <button data-tab="veh" data-grp="settings">🚚 รถขนส่ง</button>
     <button data-tab="crew" data-grp="settings">👥 ตั้งค่าพนักงาน</button>
@@ -236,6 +240,22 @@
       </div>
     </div>
 
+    <!-- VISIT HISTORY (ประวัติเยี่ยมร้าน) -->
+    <div class="pane" id="pane-visithistory">
+      <div class="card">
+        <h3>📖 ประวัติเยี่ยมร้าน — ดู / แก้ไข / ลบ</h3>
+        <div class="row" style="margin-bottom:10px;align-items:flex-end">
+          <div class="field"><label class="fl">ค้นหา</label><input id="vhSearch" placeholder="ชื่อร้าน / วันที่"></div>
+          <div class="field" style="max-width:170px"><label class="fl">พนักงานขาย</label><select id="vhSales"><option value="">— ทุกคน —</option></select></div>
+          <div class="field" style="max-width:160px"><label class="fl">สถานะ</label>
+            <select id="vhStatus"><option value="">— ทุกสถานะ —</option><option value="planned">วางแผน</option><option value="checked_in">เช็คอินแล้ว</option><option value="done">เสร็จ</option><option value="skipped">ข้าม</option></select></div>
+          <button class="btn ghost sm" id="vhReload">↻ รีเฟรช</button>
+        </div>
+        <div class="hint" id="vhPermNote" style="margin-bottom:8px"></div>
+        <div style="overflow:auto" id="vhBody"></div>
+      </div>
+    </div>
+
     <!-- HISTORY (ประวัติเส้นทาง) -->
     <div class="pane" id="pane-history">
       <div class="card">
@@ -311,6 +331,32 @@
 </div>
 <div class="toast" id="toast"></div>
 
+<!-- แก้ไขการเยี่ยมร้าน -->
+<div class="rf-modal" id="vhModal"><div class="rf-sheet">
+  <h3 style="margin:0 0 4px">✏️ แก้ไขการเยี่ยมร้าน</h3>
+  <div id="vhStore" class="muted" style="font-size:13px;margin-bottom:8px"></div>
+  <div class="row">
+    <div class="field"><label class="fl">พนักงานขาย</label><select id="vh_sales"></select></div>
+    <div class="field"><label class="fl">วันที่</label><input id="vh_plan_date" type="date"></div>
+    <div class="field"><label class="fl">สถานะ</label><select id="vh_status"><option value="planned">วางแผน</option><option value="checked_in">เช็คอินแล้ว</option><option value="done">เสร็จ</option><option value="skipped">ข้าม</option></select></div>
+  </div>
+  <div style="margin-top:10px"><label class="fl">วัตถุประสงค์</label><input id="vh_purpose"></div>
+  <div class="row" style="margin-top:10px">
+    <div class="field"><label class="fl">ผลการเข้าพบ</label><input id="vh_result"></div>
+    <div class="field"><label class="fl">ยอดขาย</label><input id="vh_order_amount" type="number"></div>
+    <div class="field"><label class="fl">นัดครั้งต่อไป</label><input id="vh_next_visit_date" type="date"></div>
+  </div>
+  <div style="margin-top:10px"><label class="fl">สิ่งที่ได้จากลูกค้า / สนใจ</label><input id="vh_interest"></div>
+  <div style="margin-top:10px"><label class="fl">Feedback</label><input id="vh_feedback"></div>
+  <div style="margin-top:10px"><label class="fl">สิ่งที่ตกลงไว้ครั้งหน้า</label><input id="vh_next_action"></div>
+  <div style="margin-top:10px"><label class="fl">หมายเหตุ</label><input id="vh_note"></div>
+  <div class="row" style="margin-top:14px">
+    <button class="btn ghost" id="vhCancel" style="flex:1">ยกเลิก</button>
+    <button class="btn" id="vhSave" style="flex:1">💾 บันทึก</button>
+  </div>
+  <div class="err" id="vhErr"></div>
+</div></div>
+
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -374,6 +420,7 @@ function activateSub(btn){
   if(btn.dataset.tab==='plan'&&planMap)setTimeout(()=>planMap.invalidateSize(),50);
   if(btn.dataset.tab==='history')renderHistory();
   if(btn.dataset.tab==='salesplan'){renderSalesPlan();loadSalesVisits().then(renderSalesList);buildSalesMap();}
+  if(btn.dataset.tab==='visithistory'){loadSalesVisits().then(renderVisitHistory);}
 }
 function showSub(main){
   $$('#mainTabs button').forEach(x=>x.classList.toggle('active',x.dataset.main===main));
@@ -622,6 +669,80 @@ async function delSalesVisit(id){
   if(error){toast('ลบไม่ได้: '+error.message);return;}
   toast('ลบแล้ว');await loadSalesVisits();renderSalesList();
 }
+
+/* ---------- ประวัติเยี่ยมร้าน (ดู/แก้/ลบ) ---------- */
+let vhEditId=null;
+function canEditVisit(){return me.role==='admin'||!!myPerm.can_edit_visit;}
+function canDelVisit(){return me.role==='admin'||!!myPerm.can_del_visit;}
+function renderVisitHistory(){
+  const host=$('#vhBody'); if(!host)return;
+  const sp=salesPeople();
+  if($('#vhSales').options.length<=1)$('#vhSales').innerHTML='<option value="">— ทุกคน —</option>'+sp.map(s=>`<option value="${s.id}">${esc(s.full_name)}</option>`).join('');
+  const note=$('#vhPermNote');
+  if(note)note.innerHTML=(canEditVisit()||canDelVisit())?`สิทธิ์ของคุณ: ${canEditVisit()?'✅ แก้ไขได้':'⛔ แก้ไขไม่ได้'} · ${canDelVisit()?'✅ ลบได้':'⛔ ลบไม่ได้'}`:'⚠️ ดูอย่างเดียว — Admin ตั้งสิทธิ์ที่แท็บ 🔑 สิทธิ์';
+  const q=($('#vhSearch').value||'').trim().toLowerCase(), sf=$('#vhSales').value, st=$('#vhStatus').value;
+  let rows=salesVisits.slice();
+  if(sf)rows=rows.filter(v=>v.sales_id===sf);
+  if(st)rows=rows.filter(v=>v.status===st);
+  if(q)rows=rows.filter(v=>((v.customers&&v.customers.name)||'').toLowerCase().includes(q)||(v.plan_date||'').includes(q));
+  if(!rows.length){host.innerHTML='<div class="muted">ไม่มีรายการ</div>';return;}
+  const canAny=canEditVisit()||canDelVisit();
+  host.innerHTML=`<table><tr><th>วันที่</th><th>ร้าน</th><th>พนักงานขาย</th><th>วัตถุประสงค์</th><th>สถานะ</th><th>ผล/ยอด</th>${canAny?'<th></th>':''}</tr>
+    ${rows.map(v=>`<tr>
+      <td>${esc(v.plan_date||'-')}</td>
+      <td><b>${esc(v.customers?v.customers.name:'-')}</b></td>
+      <td>${esc(salesName(v.sales_id)||'-')}</td>
+      <td>${esc(v.purpose||'-')}</td>
+      <td>${SV_STATUS[v.status]||esc(v.status)}</td>
+      <td>${esc(v.result||'')}${v.order_amount?' · '+(+v.order_amount).toLocaleString():''}</td>
+      ${canAny?`<td style="white-space:nowrap">
+        ${canEditVisit()?`<button class="btn ghost sm" data-vhedit="${v.id}">✏️ แก้ไข</button>`:''}
+        ${canDelVisit()?`<button class="btn ghost sm" data-vhdel="${v.id}" style="color:var(--bad)">🗑️ ลบ</button>`:''}
+      </td>`:''}</tr>`).join('')}</table>`;
+  host.querySelectorAll('[data-vhedit]').forEach(b=>b.onclick=()=>openVisitEdit(+b.dataset.vhedit));
+  host.querySelectorAll('[data-vhdel]').forEach(b=>b.onclick=()=>delVisit(+b.dataset.vhdel));
+}
+function openVisitEdit(id){
+  const v=salesVisits.find(x=>x.id===id); if(!v)return; vhEditId=id;
+  const sp=salesPeople();
+  $('#vh_sales').innerHTML=sp.map(s=>`<option value="${s.id}">${esc(s.full_name)}</option>`).join('');
+  $('#vh_sales').value=v.sales_id||'';
+  $('#vhStore').textContent=(v.customers?v.customers.name:'')||'';
+  $('#vh_plan_date').value=v.plan_date||''; $('#vh_status').value=v.status||'planned';
+  $('#vh_purpose').value=v.purpose||''; $('#vh_result').value=v.result||'';
+  $('#vh_order_amount').value=v.order_amount??''; $('#vh_next_visit_date').value=v.next_visit_date||'';
+  $('#vh_interest').value=v.interest||''; $('#vh_feedback').value=v.feedback||'';
+  $('#vh_next_action').value=v.next_action||''; $('#vh_note').value=v.note||'';
+  $('#vhErr').textContent=''; $('#vhModal').classList.add('open');
+}
+$('#vhCancel').onclick=()=>$('#vhModal').classList.remove('open');
+$('#vhSave').onclick=async()=>{
+  if(!vhEditId)return;
+  const upd={sales_id:$('#vh_sales').value||null,plan_date:$('#vh_plan_date').value||null,status:$('#vh_status').value,
+    purpose:$('#vh_purpose').value.trim()||null,result:$('#vh_result').value.trim()||null,
+    order_amount:$('#vh_order_amount').value?+$('#vh_order_amount').value:null,
+    next_visit_date:$('#vh_next_visit_date').value||null,interest:$('#vh_interest').value.trim()||null,
+    feedback:$('#vh_feedback').value.trim()||null,next_action:$('#vh_next_action').value.trim()||null,
+    note:$('#vh_note').value.trim()||null,updated_at:new Date().toISOString()};
+  $('#vhSave').disabled=true;
+  const{error}=await sb.from('sales_visits').update(upd).eq('id',vhEditId);
+  $('#vhSave').disabled=false;
+  if(error){$('#vhErr').textContent='บันทึกไม่สำเร็จ: '+error.message;return;}
+  $('#vhModal').classList.remove('open');toast('✅ บันทึกแล้ว');
+  await loadSalesVisits();renderVisitHistory();
+};
+async function delVisit(id){
+  if(!canDelVisit()){toast('ไม่มีสิทธิ์ลบ');return;}
+  const v=salesVisits.find(x=>x.id===id);
+  if(!confirm('ลบประวัติเยี่ยม '+(v&&v.customers?v.customers.name:id)+' ถาวร?'))return;
+  const{error}=await sb.from('sales_visits').delete().eq('id',id);
+  if(error){toast('ลบไม่ได้: '+error.message);return;}
+  toast('🗑️ ลบแล้ว');await loadSalesVisits();renderVisitHistory();
+}
+$('#vhSearch').addEventListener('input',renderVisitHistory);
+$('#vhSales').addEventListener('change',renderVisitHistory);
+$('#vhStatus').addEventListener('change',renderVisitHistory);
+$('#vhReload').onclick=async()=>{await loadSalesVisits();renderVisitHistory();};
 async function loadTripForEdit(id){
   const t=allTrips.find(x=>x.id===id); if(!t)return;
   editTripId=id;
@@ -723,6 +844,7 @@ function applyTabGating(){
   $$('#subTabs button').forEach(b=>{const t=b.dataset.tab;let show=true;
     if(t==='perms')show=isAdmin;
     else if(t==='salesplan')show=isAdmin||noMatrix||!!myPerm.can_plan;
+    else if(t==='visithistory')show=isAdmin||noMatrix||!!myPerm.can_plan||!!myPerm.can_edit_visit||!!myPerm.can_del_visit;
     else if(t==='history')show=isAdmin||noMatrix||!!myPerm.can_plan||!!myPerm.can_edit_trip||!!myPerm.can_del_trip;
     else if(!noMatrix&&map[t])show=isAdmin||!!myPerm[map[t]];
     b.dataset.gate=show?'1':'0';});
@@ -1128,7 +1250,7 @@ $('#addUser').onclick=async()=>{
 };
 const ROLES=['admin','manager','dc_head','sales','driver','helper','viewer'];
 const ROLE_LABEL={admin:'ผู้ดูแลระบบ',manager:'ผู้จัดการ',dc_head:'หัวหน้า DC',sales:'พนักงานขาย',driver:'คนขับ',helper:'ผู้ช่วย',viewer:'ดูอย่างเดียว'};
-const PERMS=[['can_dashboard','แดชบอร์ด'],['can_plan','วางแผน trip'],['can_stores','จัดการร้าน'],['can_vehicles','จัดการรถ'],['can_reports','รายงาน'],['can_staff','จัดการพนักงาน'],['can_driver_app','แอปคนขับ'],['can_edit_trip','แก้ประวัติเส้นทาง'],['can_del_trip','ลบประวัติเส้นทาง']];
+const PERMS=[['can_dashboard','แดชบอร์ด'],['can_plan','วางแผน trip'],['can_stores','จัดการร้าน'],['can_vehicles','จัดการรถ'],['can_reports','รายงาน'],['can_staff','จัดการพนักงาน'],['can_driver_app','แอปคนขับ'],['can_edit_trip','แก้ประวัติเส้นทาง'],['can_del_trip','ลบประวัติเส้นทาง'],['can_edit_visit','แก้ประวัติเยี่ยม'],['can_del_visit','ลบประวัติเยี่ยม']];
 let perms={}, myPerm={}, FLAGS={};
 function renderCrewTable(){
   const el=$('#crewTable');

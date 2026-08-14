@@ -1,6 +1,6 @@
 # HANDOFF — RouteFlow (ระบบขนส่ง)
 
-> อัปเดตล่าสุด: 2026-08-09 · เจ้าของ: Ball — Friendship SuperMart, ปากเซ ลาว
+> อัปเดตล่าสุด: 2026-08-14 · เจ้าของ: Ball — Friendship SuperMart, ปากเซ ลาว
 > เอกสารนี้ = สถานะปัจจุบัน + วิธีรับงานต่อ (ดู `SPEC.md` สำหรับสถาปัตยกรรมละเอียด)
 
 ---
@@ -17,6 +17,11 @@
 **แท็บ admin เป็น 2 ชั้น:** แท็บหลัก **📋 วางแผนเส้นทาง** (ย่อย: วางแผน trip · ประวัติเส้นทาง) กับ **⚙️ ตั้งค่า** (ย่อย: รถขนส่ง · ตั้งค่าพนักงาน · สิทธิ์) — gate สิทธิ์ที่แท็บย่อย, ซ่อนแท็บหลักถ้าย่อยหมด · `showSub()/activateSub()/goTab()`
 **วางแผน trip (admin.html):** ช่องค้นหาร้านเพื่อเพิ่มลงเส้นทาง (ชื่อ/รหัส/**เบอร์โทร**) นอกเหนือจากคลิกหมุด
 **จำ login ข้ามหน้า:** ทุกหน้า boot() ซ่อนหน้า login ทันทีถ้ามี session ใน localStorage (กันจอ login แว็บ) แล้วค่อยตรวจ — หมดอายุจึงโชว์ login กลับ
+**🧑‍💼 ระบบเยี่ยมร้าน / CRM (ใหม่):** `sales.html` (PWA พนักงานขาย) เช็คอิน GPS + บันทึกเข้าพบ (ผล/ยอด/สิ่งที่ได้จากลูกค้า/feedback/สิ่งที่ตกลงไว้/นัดครั้งหน้า) + เพิ่มร้านใหม่ตอนเดินเข้าพบ + ปุ่มตำแหน่งฉัน · admin มอบหมาย (แท็บ 🧑‍💼 แผนเยี่ยมร้าน มีแผนที่คลิกเลือกร้าน) + ประวัติเยี่ยม (แท็บ 📖 ดู/แก้/ลบ) · dashboard เมนู 🧑‍💼 ประวัติเยี่ยมร้าน (แผนที่จุดร้าน+แบ่งตามวันที่) · stores มีการ์ดประวัติการเข้าพบต่อร้าน · ผู้จัดการเปิด sales.html เห็นงานทุกคน + กรองรายคน
+**ดาวเทียม/แผนที่:** ทุกแผนที่มีปุ่มสลับ 🗺️ แบบปัจจุบัน ↔ 🛰️ ดาวเทียม (Esri ฟรี) มุมซ้ายล่าง · `addBaseLayers()`
+**legend:** จัดลำดับหมวด (ลูกค้าจริงบน, "ต้องสำรวจ" ล่างสุด — `catRank()`) + ปุ่ม เปิดหมด/ปิดหมด · spMap (แผนเยี่ยม) มี filter หมวด + รวม/ไม่รวม ครบเหมือนแผนที่อื่น
+**viewer (ดูอย่างเดียว):** viewer เข้าดูได้ทุกหน้า (dashboard/map/stores) แต่ซ่อนปุ่มแก้ + RLS กันเขียน — ต้องรัน `viewer_readonly.sql` (ให้ viewer อ่าน trips/visits ได้)
+**stores:** หมวด + ประเภทร้าน แก้/เพิ่มใหม่ได้ (datalist) · **service worker network-first + no-store** (v4) ดึงไฟล์ใหม่เสมอเมื่อออนไลน์ กันหน้าค้าง cache
 
 ## 2. ลิงก์สำคัญ
 | อะไร | ที่ไหน |
@@ -30,17 +35,18 @@
 | ไฟล์ | หน้าที่ | สิทธิ์ |
 |---|---|---|
 | `index.html` | หน้าหลัก รวมลิงก์ | ทุกคน |
-| `dashboard.html` | trip สด (**ติดตามรถ realtime ทุก 15 วิ**) · แผน vs จริง(ถนนจริง) · นอกเส้นทาง · timeline · PDF · รายงาน | admin/manager |
+| `dashboard.html` | trip สด (realtime 15 วิ) · แผน vs จริง(ถนนจริง) · นอกเส้นทาง · timeline · PDF · รายงาน · **🧑‍💼 ประวัติเยี่ยมร้าน (แผนที่+แบ่งวันที่)** | admin/manager/**viewer** |
 | `driver.html` | PWA คนขับ: ออกเดินทาง/GPS/เช็คอิน/**POD (รูป+ผู้รับ+ลายเซ็น+ส่งครบ/บางส่วน/ตีกลับ)**/จบงาน | crew ของ trip |
-| `admin.html` | วางแผน trip (**+จัดลำดับอัตโนมัติ OSRM**) · จัดการรถ/คลัง · จัดการพนักงาน · สิทธิ์ | admin/manager |
-| `stores.html` | จัดการร้าน: เพิ่ม/แก้ · ปักพิกัด · รูป · ประวัติซื้อ | login |
-| `map.html` | แผนที่ร้าน 401 จุด · ปรับสี/ขนาด/รูปทรงหมุด · ค้นหา(ชื่อ/รหัส/เบอร์) | login |
+| `admin.html` | 2 ชั้น — **วางแผนเส้นทาง** (วางแผน trip/แผนเยี่ยมร้าน/ประวัติเยี่ยม/ประวัติเส้นทาง) · **ตั้งค่า** (รถ/พนักงาน/สิทธิ์) | admin/manager |
+| `sales.html` | **PWA พนักงานขาย: เช็คอิน+บันทึกเข้าพบ (CRM) · เพิ่มร้านใหม่ · ตำแหน่งฉัน** · ผู้จัดการเห็นทุกคน | sales / manager |
+| `stores.html` | จัดการร้าน: เพิ่ม/แก้ · ปักพิกัด(ดาวเทียม) · รูป · ประวัติซื้อ · **ประวัติเข้าพบ (CRM)** | login (viewer=ดูอย่างเดียว) |
+| `map.html` | แผนที่ร้าน (~600 จุด) · ปรับสี/ขนาด/รูปทรงหมุด · รวม/ไม่รวม · ดาวเทียม · ค้นหา(ชื่อ/รหัส/เบอร์) | login |
 | `config.js` | Supabase URL + publishable key (ฝังได้ ปลอดภัย — RLS กันข้อมูล) | — |
 
 ## 4. ฐานข้อมูล (Supabase)
-**ตาราง (schema.postgres.sql):** profiles, vehicles, customers, trips, trip_crew, trip_stops, route_plan_points, gps_pings, off_route_events, delivery_proofs, notifications, audit_logs + view `v_trip_summary`
+**ตาราง (schema.postgres.sql):** profiles, vehicles, customers, trips, trip_crew, trip_stops, route_plan_points, gps_pings, off_route_events, delivery_proofs, notifications, audit_logs + view `v_trip_summary` · **`sales_visits`** (เยี่ยมร้าน/CRM)
 
-**ข้อมูลที่มี:** ลูกค้า **401 ร้าน** (import จาก Google My Maps, 10 หมวด, 12 ร้านมีรหัส FS-)
+**ข้อมูลที่มี:** ลูกค้า ~**600+ ร้าน** — 401 จาก Google My Maps + **634 จาก Excel Google Map** (`customers_gmap_import.sql`, `source='gmap_import'`, 5 หมวด "ต้องสำรวจ") ลบร้านฝั่งไทย (lng<105.5) ออกแล้ว · ร้าน sales เพิ่มเอง `source='sales_new'`
 
 ### สถานะการรัน SQL (รันใน Supabase SQL Editor เอง)
 | ไฟล์ | สถานะ | หมายเหตุ |
@@ -55,6 +61,12 @@
 | `pod.sql` | ✅ รันแล้ว | คอลัมน์หลักฐานส่ง (received_by/signature/result/reason) ใน `delivery_proofs` |
 | `return_depot.sql` | ✅ รันแล้ว | คลังกลับหลังส่งครบ (`trips.return_name/return_lat/return_lng/returned_at`) |
 | `features.sql` | ✅ รันแล้ว | `app_settings` เปิด/ปิดฟีเจอร์ + คอลัมน์ COD (`trip_stops.cod_amount/collected_amount/order_note`) |
+| `customers_gmap_import.sql` | ✅ รันแล้ว | 634 ร้านจาก Excel Google Map (gitignored) + ลบร้านไทย `delete ... where lng<105.5` |
+| `trip_history_perms.sql` | ⚠️ ต้องรัน | สิทธิ์ `can_edit_trip`/`can_del_trip` (แก้/ลบประวัติเส้นทาง) |
+| `viewer_readonly.sql` | ⚠️ ต้องรัน | `can_view_all()` + เปิด SELECT ให้ viewer อ่าน trips/visits/gps/proofs (เขียนยังบล็อก) |
+| `sales_crm.sql` | ⚠️ ต้องรัน (2 สเต็ป) | STEP1 = `alter type ... add value 'sales'` · STEP2 = ตาราง `sales_visits` + RLS |
+| `sales_add_customer.sql` | ⚠️ ต้องรัน | RLS ให้ role `sales` เพิ่มร้านใหม่ (INSERT customers) ได้ |
+| `visit_history_perms.sql` | ⚠️ ต้องรัน | สิทธิ์ `can_edit_visit`/`can_del_visit` (แก้/ลบประวัติเยี่ยม) |
 
 ## 5. Edge Functions
 | ฟังก์ชัน | สถานะ | ใช้ทำ |
@@ -66,7 +78,7 @@
 โค้ดอยู่ที่ `supabase/functions/<ชื่อ>/index.ts` · deploy: Edge Functions → Deploy a new function → Via Editor → วางโค้ด → ตั้งชื่อให้ตรง → Deploy (key ที่จำเป็น Supabase ใส่ให้อัตโนมัติ)
 
 ## 6. RBAC / สิทธิ์
-admin (ทุกอย่าง) · manager (แดชบอร์ด/จัดการ) · **dc_head หัวหน้า DC (สิทธิ์ระดับ manager)** · driver+helper (เห็นเฉพาะ trip ตัวเอง, ส่ง GPS/เช็คอิน) · viewer (อ่าน)
+admin (ทุกอย่าง) · manager (แดชบอร์ด/จัดการ) · **dc_head หัวหน้า DC (สิทธิ์ระดับ manager)** · **sales พนักงานขาย (เยี่ยมร้าน/CRM, เพิ่มร้านใหม่ได้)** · driver+helper (เห็นเฉพาะ trip ตัวเอง, ส่ง GPS/เช็คอิน) · **viewer (ดูอย่างเดียวทุกหน้า — RLS+UI กันเขียน, ต้องรัน `viewer_readonly.sql`)**
 - **login ด้วยไอดี:** พนักงานพิมพ์ไอดีสั้น (เช่น `driver01`) ระบบแปลงเป็น `<id>@routeflow.local` ก่อนส่ง Supabase Auth · พิมพ์ที่มี `@` = ใช้เป็นอีเมลจริง (เช่นแอดมินเดิม) · ไอดีเก็บใน `profiles.username`
 - **หน้ากำหนดสิทธิ์** (admin.html แท็บ "🔑 สิทธิ์"): เมทริกซ์ `role_permissions` คุมการแสดง/ใช้เมนูราย role — **แก้ได้เฉพาะ admin** (บังคับด้วย RLS) · เป็น UI-gating ชั้นบน โดยมี RLS ของแต่ละตารางเป็นด่านความปลอดภัยจริง
 - **สร้าง profile admin คนแรก** ต้องรัน SQL bootstrap (insert profiles จาก auth.users) เพราะสร้าง user ตัวแรกผ่าน RLS ไม่ได้
@@ -100,24 +112,23 @@ git push
 > ปิดอยู่ = ไม่กระทบระบบเดิม · ต้องรัน `features.sql` ก่อนถึงเปิดได้
 
 ## 10. งานที่เหลือ (Todo)
-> ✅ SQL migration ครบ (customers_profile + driver_phase) · Edge Functions ครบ (create + delete) — **ระบบหลักพร้อมใช้จริงครบวงจร**
+> ⚠️ **SQL ที่ต้องรัน (ตามลำดับ):** `trip_history_perms.sql` · `viewer_readonly.sql` · `sales_crm.sql` (2 สเต็ป) · `sales_add_customer.sql` · `visit_history_perms.sql` — ถ้ายังไม่รัน ฟีเจอร์ที่เกี่ยว (ประวัติ/viewer/เยี่ยมร้าน) จะ error หรือหน้าว่าง
 1. **LINE แจ้งเตือน** — Edge Function `notify-line` (ยังไม่ทำ) ยิงเข้ากลุ่มผู้จัดการเมื่อวิ่งนอกเส้นทาง/จบงาน · ต้องมี LINE Channel access token · dashboard มีปุ่ม "ส่ง LINE" เรียก `notify-line` รออยู่แล้ว
-2. Sync รหัส FS- อีก 389 ร้านกับ Friendship `horeca_customers`
-3. (อนาคต) Realtime GPS สดบนแดชบอร์ด, รายงานสรุป, route_plan_points ตามถนนจริง
+2. Sync รหัส FS- ร้านกับ Friendship `horeca_customers` · ตรวจ/รวมร้านซ้ำระหว่างชุด KML กับ gmap_import
+3. (อนาคต) รายงานสรุปยอดขาย/CRM รายพนักงาน · self-host OSRM ถ้า production หนัก
 
 ## 11. ไฟล์ในโปรเจกต์
 ```
-index/dashboard/driver/admin/stores/map .html   ← หน้าเว็บ (responsive + PWA)
+index/dashboard/driver/admin/stores/map/sales .html ← หน้าเว็บ (responsive + PWA)
 config.js                                        ← Supabase config
-manifest.webmanifest / manifest-driver.webmanifest ← PWA manifest (hub / คนขับ)
-sw.js / icon.svg                                 ← service worker + ไอคอนแอป
+manifest.webmanifest / -driver / -sales .webmanifest ← PWA manifest (hub / คนขับ / ขาย)
+sw.js (v4, no-store) / icon.svg                  ← service worker + ไอคอนแอป
 schema.postgres.sql                              ← ตาราง+RLS (รันแล้ว)
-customers_import.sql                             ← 401 ร้าน (รันแล้ว, gitignored)
+customers_import.sql / customers_gmap_import.sql ← ร้าน (รันแล้ว, gitignored)
 customers_profile.sql / driver_phase.sql         ← migration (รันแล้ว)
-username_login.sql / roles_permissions.sql        ← migration (รันแล้ว)
-trip_history_perms.sql                            ← สิทธิ์แก้/ลบประวัติเส้นทาง (⚠️ ต้องรัน)
-supabase/functions/admin-create-user/index.ts    ← deploy แล้ว
-supabase/functions/admin-delete-user/index.ts    ← deploy แล้ว
+username_login.sql / roles_permissions.sql / depots/pod/return_depot/features.sql ← (รันแล้ว)
+trip_history_perms / viewer_readonly / sales_crm / sales_add_customer / visit_history_perms .sql ← ⚠️ ต้องรัน
+supabase/functions/admin-{create,delete}-user + admin-set-password/index.ts ← deploy แล้ว
 import_customers.mjs / mymaps_full.kml / *.kmz    ← เครื่องมือ import (gitignored)
 SPEC.md / HANDOFF.md                             ← เอกสาร
 ```

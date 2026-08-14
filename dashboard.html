@@ -152,6 +152,7 @@
         <a class="active" data-view="dash"><span class="ic">🏠</span> แดชบอร์ด</a>
         <a data-view="today"><span class="ic">🛣️</span> เส้นทางวันนี้ <span class="cnt" id="navToday">0</span></a>
         <a data-view="history"><span class="ic">🕘</span> ประวัติเส้นทาง</a>
+        <a data-view="visits"><span class="ic">🧑‍💼</span> ประวัติเยี่ยมร้าน</a>
         <a href="admin.html#plan"><span class="ic">🗺️</span> วางแผนเส้นทาง</a>
         <a href="admin.html#veh"><span class="ic">🚚</span> รถขนส่ง</a>
         <a href="admin.html#crew"><span class="ic">🧑‍✈️</span> พนักงานขับรถ</a>
@@ -212,6 +213,7 @@
       <!-- report / off-route / settings -->
       <div id="reportView" style="display:none"></div>
       <div id="offView" style="display:none"></div>
+      <div id="visitsView" style="display:none"></div>
       <div id="settingsView" style="display:none"></div>
     </main>
   </div>
@@ -269,13 +271,14 @@ async function loadFlags(){try{const{data}=await sb.from('app_settings').select(
 })();
 
 // nav
-function hideAllViews(){['overView','detailView','reportView','offView','settingsView'].forEach(id=>{const el=$('#'+id);if(el)el.style.display='none';});}
+function hideAllViews(){['overView','detailView','reportView','offView','visitsView','settingsView'].forEach(id=>{const el=$('#'+id);if(el)el.style.display='none';});}
 $$('.nav a[data-view]').forEach(a=>a.onclick=()=>{
   $$('.nav a').forEach(x=>x.classList.remove('active'));a.classList.add('active');
   const v=a.dataset.view;
   hideAllViews();
   if(v==='report'){$('#reportView').style.display='block';renderReport();return;}
   if(v==='offroute'){$('#offView').style.display='block';renderOffReport();return;}
+  if(v==='visits'){$('#visitsView').style.display='block';renderVisitsView();return;}
   if(v==='settings'){$('#settingsView').style.display='block';renderSettings();return;}
   // dash / today / history → overview
   histMode=(v==='history');filter='all';syncFilterBtns();
@@ -721,6 +724,69 @@ async function checkLine(){
 function statusTh(s){return{planned:'วางแผน',live:'กำลังส่ง',delayed:'ล่าช้า',alert:'แจ้งเตือน',done:'สำเร็จ',cancelled:'ยกเลิก'}[s]||s;}
 function fmtTime(iso){try{return new Date(iso).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'});}catch(e){return iso;}}
 function esc(s){return(s==null?'':String(s)).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
+
+/* ---------- ประวัติเยี่ยมร้าน (Sales visits) ---------- */
+let visitsData=[], vhvMap=null, vhvLayer=null, vhvSalesById={}, vhvFilter='';
+const SV_COL={planned:'#ea580c',checked_in:'#f59e0b',done:'#0f9d58',skipped:'#9ca3af'};
+const SV_TXT={planned:'วางแผน',checked_in:'เช็คอิน',done:'เสร็จ',skipped:'ข้าม'};
+async function renderVisitsView(){
+  const host=$('#visitsView');
+  host.innerHTML=`<div class="topbar"><div><h1>ประวัติเยี่ยมร้าน</h1><div class="sub">จุดหมายร้านค้าที่เข้าพบ · แบ่งตามวันที่</div></div>
+      <div class="search"><select id="vhvSales"><option value="">— พนักงานขายทุกคน —</option></select></div></div>
+    <div class="panel" style="margin-bottom:16px"><div id="vhvMap" style="height:360px;border-radius:12px;overflow:hidden"></div>
+      <div class="muted" style="font-size:12px;margin-top:6px">🟠 วางแผน · 🟡 เช็คอิน · 🟢 เสร็จ · ⚪ ข้าม</div></div>
+    <div class="panel"><div id="vhvList" class="muted">กำลังโหลด...</div></div>`;
+  // salesperson dropdown
+  const{data:profs}=await sb.from('profiles').select('id,full_name,role');
+  vhvSalesById={}; (profs||[]).forEach(p=>vhvSalesById[p.id]=p.full_name);
+  const sp=(profs||[]).filter(p=>p.role==='sales');
+  $('#vhvSales').innerHTML='<option value="">— พนักงานขายทุกคน —</option>'+sp.map(p=>`<option value="${p.id}">${esc(p.full_name)}</option>`).join('');
+  $('#vhvSales').value=vhvFilter;
+  $('#vhvSales').onchange=()=>{vhvFilter=$('#vhvSales').value;drawVisits();};
+  // map
+  if(vhvMap){try{vhvMap.remove();}catch(e){}vhvMap=null;vhvLayer=null;}
+  vhvMap=L.map('vhvMap').setView([15.11,105.82],12);
+  addBaseLayers(vhvMap);
+  const{data,error}=await sb.from('sales_visits').select('*, customers(name,lat,lng,code)')
+    .order('plan_date',{ascending:false}).order('created_at',{ascending:false}).limit(1000);
+  visitsData=error?[]:(data||[]);
+  drawVisits();
+}
+function drawVisits(){
+  let rows=visitsData.slice();
+  if(vhvFilter)rows=rows.filter(v=>v.sales_id===vhvFilter);
+  if(!vhvLayer)vhvLayer=L.layerGroup().addTo(vhvMap); else vhvLayer.clearLayers();
+  const pts=[];
+  rows.forEach(v=>{const c=v.customers;if(!c||c.lat==null)return;
+    L.circleMarker([c.lat,c.lng],{radius:7,color:'#fff',weight:2,fillColor:SV_COL[v.status]||'#ea580c',fillOpacity:1})
+      .bindPopup(`<b>${esc(c.name||'')}</b><br>${esc(v.plan_date||'')} · ${SV_TXT[v.status]||esc(v.status)}<br>🧑‍💼 ${esc(vhvSalesById[v.sales_id]||'?')}${v.result?'<br>ผล: '+esc(v.result):''}${v.order_amount?'<br>ยอด '+(+v.order_amount).toLocaleString():''}`)
+      .addTo(vhvLayer);
+    pts.push([c.lat,c.lng]);
+  });
+  if(pts.length)try{vhvMap.fitBounds(pts,{padding:[30,30],maxZoom:15});}catch(e){}
+  // group list by date
+  const byDate={};
+  rows.forEach(v=>{const d=v.plan_date||'(ไม่ระบุวันที่)';(byDate[d]=byDate[d]||[]).push(v);});
+  const dates=Object.keys(byDate).sort((a,b)=>b.localeCompare(a));
+  const list=$('#vhvList');
+  if(!dates.length){list.innerHTML='<div class="muted">ยังไม่มีข้อมูลการเยี่ยมร้าน</div>';return;}
+  list.innerHTML=dates.map(d=>{
+    const vs=byDate[d], doneN=vs.filter(v=>v.status==='done').length, sale=vs.reduce((s,v)=>s+(+v.order_amount||0),0);
+    return `<div style="margin-bottom:16px">
+      <div style="font-weight:800;color:var(--brand);border-bottom:2px solid var(--line);padding-bottom:5px;margin-bottom:6px">
+        📅 ${esc(d)} <span class="muted" style="font-weight:400;font-size:12px">· ${vs.length} ร้าน · เสร็จ ${doneN}${sale?' · ยอดรวม '+sale.toLocaleString():''}</span></div>
+      ${vs.map(v=>`<div style="display:flex;gap:8px;align-items:center;padding:7px 0;border-bottom:1px solid #f3e8dd;font-size:13px;flex-wrap:wrap">
+        <span style="width:11px;height:11px;border-radius:50%;background:${SV_COL[v.status]||'#ea580c'};flex:none"></span>
+        <b style="flex:1;min-width:120px">${esc(v.customers?v.customers.name:'-')}</b>
+        <span>🧑‍💼 ${esc(vhvSalesById[v.sales_id]||'?')}</span>
+        <span class="muted">${esc(v.purpose||'')}</span>
+        <span class="muted">${SV_TXT[v.status]||esc(v.status)}</span>
+        ${v.order_amount?'<b>'+(+v.order_amount).toLocaleString()+'</b>':''}
+        ${v.next_visit_date?`<span class="muted">· นัด ${esc(v.next_visit_date)}</span>`:''}
+      </div>`).join('')}
+    </div>`;
+  }).join('');
+}
 let tT;function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('show');clearTimeout(tT);tT=setTimeout(()=>t.classList.remove('show'),2600);}
 </script>
 <script>if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js').catch(function(){});</script>

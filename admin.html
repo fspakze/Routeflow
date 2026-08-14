@@ -220,6 +220,9 @@
             <select id="spPurpose"><option>เสนอขายสินค้า</option><option>แนะนำสินค้าใหม่</option><option>ติดตามลูกค้า</option><option>เก็บเงิน</option><option>สำรวจร้าน</option><option>อื่น ๆ</option></select></div>
           <div class="field" style="display:flex;align-items:flex-end"><button class="btn" id="spAssign">+ มอบหมาย</button></div>
         </div>
+        <div class="hint" style="margin:8px 0 4px">หรือ <b>คลิกหมุดบนแผนที่</b> เพื่อเลือกร้าน (หมุดสีเขียว ✓ = ร้านที่เลือก)</div>
+        <div class="map-hold"><div id="spMap" style="height:340px;border-radius:12px;border:1px solid var(--line)"></div>
+          <button type="button" class="map-fs-btn" id="spFsBtn">⛶ เต็มจอ</button></div>
         <div class="err" id="spErr"></div>
       </div>
       <div class="card">
@@ -369,7 +372,7 @@ function activateSub(btn){
   $$('.pane').forEach(p=>p.classList.remove('active'));$('#pane-'+btn.dataset.tab).classList.add('active');
   if(btn.dataset.tab==='plan'&&planMap)setTimeout(()=>planMap.invalidateSize(),50);
   if(btn.dataset.tab==='history')renderHistory();
-  if(btn.dataset.tab==='salesplan'){renderSalesPlan();loadSalesVisits().then(renderSalesList);}
+  if(btn.dataset.tab==='salesplan'){renderSalesPlan();loadSalesVisits().then(renderSalesList);buildSalesMap();}
 }
 function showSub(main){
   $$('#mainTabs button').forEach(x=>x.classList.toggle('active',x.dataset.main===main));
@@ -489,6 +492,35 @@ async function loadSalesVisits(){
   const{data,error}=await sb.from('sales_visits').select('*, customers(name,code)').order('plan_date',{ascending:false}).limit(500);
   salesVisits=error?[]:(data||[]);
 }
+let spMap=null, spCluster=null, spMarkerById={};
+function buildSalesMap(){
+  if(spMap){setTimeout(()=>spMap.invalidateSize(),60);return;}
+  spMap=L.map('spMap',{preferCanvas:true}).setView([15.11,105.82],13);
+  addBaseLayers(spMap);
+  if(!Object.keys(styleOf).length){loadStyles([...new Set(customers.map(c=>c.category||'(ไม่ระบุ)'))]);}
+  spCluster=L.markerClusterGroup({maxClusterRadius:45}); spMarkerById={};
+  customers.forEach(c=>{ if(c.lat==null)return;
+    const cat=c.category||'(ไม่ระบุ)';
+    const m=L.marker([c.lat,c.lng],{icon:makeIcon(styleOf[cat]||defaultStyle(0))});
+    m.bindTooltip(c.name,{direction:'top'}); m.on('click',()=>pickSalesStore(c));
+    spMarkerById[c.id]=m; spCluster.addLayer(m);
+  });
+  spMap.addLayer(spCluster);
+  const withll=customers.filter(c=>c.lat!=null);
+  if(withll.length){const lats=withll.map(c=>c.lat).sort((a,b)=>a-b),lngs=withll.map(c=>c.lng).sort((a,b)=>a-b);
+    const q=(a,p)=>a[Math.min(a.length-1,Math.max(0,Math.floor(a.length*p)))];
+    try{spMap.fitBounds([[q(lats,.02),q(lngs,.02)],[q(lats,.98),q(lngs,.98)]],{padding:[30,30],maxZoom:14});}catch(e){}}
+  const fb=$('#spFsBtn'); if(fb)fb.onclick=()=>toggleMapFS(spMap,'spMap','spFsBtn');
+  setTimeout(()=>spMap.invalidateSize(),120);
+}
+function makePickIcon(){const px=34;return L.divIcon({html:`<svg width="${px}" height="${px}" viewBox="0 0 24 24"><path d="M12 2 C7.6 2 4 5.6 4 10 c0 5.6 8 11.5 8 11.5 s8-5.9 8-11.5 C20 5.6 16.4 2 12 2 z" fill="#16a34a" stroke="#fff" stroke-width="1.6"/><path d="M8.3 10.3 l2.4 2.4 l4.2-4.5" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,className:'rf-sel',iconSize:[px,px],iconAnchor:[px/2,px]});}
+function resetSalesIcons(){Object.entries(spMarkerById).forEach(([id,m])=>{const cu=customers.find(x=>String(x.id)===id);const cat=cu?(cu.category||'(ไม่ระบุ)'):'(ไม่ระบุ)';m.setIcon(makeIcon(styleOf[cat]||defaultStyle(0)));});}
+function pickSalesStore(c){
+  spPicked=c;
+  $('#spPicked').innerHTML='เลือก: <b>'+esc(c.name)+'</b>';
+  $('#spSearch').value=c.name; $('#spResults').innerHTML='';
+  resetSalesIcons(); const pm=spMarkerById[c.id]; if(pm)pm.setIcon(makePickIcon());
+}
 function renderSalesPlan(){
   const sp=salesPeople();
   $('#spSales').innerHTML=sp.length?sp.map(s=>`<option value="${s.id}">${esc(s.full_name)}</option>`).join(''):'<option value="">— ยังไม่มีพนักงานขาย (เพิ่มที่ ตั้งค่าพนักงาน) —</option>';
@@ -518,7 +550,7 @@ $('#spSearch').addEventListener('input',()=>{
   if(!q){box.innerHTML='';return;}
   const res=customers.filter(c=>(c.name||'').toLowerCase().includes(q)||(c.code||'').toLowerCase().includes(q)||(digits.length>=3&&(c.phone||'').replace(/\D/g,'').includes(digits))).slice(0,10);
   box.innerHTML=res.map(c=>`<div class="stop" data-sp="${c.id}" style="cursor:pointer"><span class="nm">${esc(c.name)}${c.code?' · '+esc(c.code):''}${c.phone?' · 📞 '+esc(c.phone):''}</span></div>`).join('')||'<div class="muted" style="font-size:13px">ไม่พบร้าน</div>';
-  box.querySelectorAll('[data-sp]').forEach(el=>el.onclick=()=>{spPicked=customers.find(x=>String(x.id)===el.dataset.sp);$('#spPicked').innerHTML='เลือก: <b>'+esc(spPicked.name)+'</b>';box.innerHTML='';});
+  box.querySelectorAll('[data-sp]').forEach(el=>el.onclick=()=>{const c=customers.find(x=>String(x.id)===el.dataset.sp);pickSalesStore(c);if(spMap&&c.lat!=null)spMap.setView([c.lat,c.lng],16);});
 });
 $('#spAssign').onclick=async()=>{
   $('#spErr').textContent='';
@@ -529,7 +561,7 @@ $('#spAssign').onclick=async()=>{
   const{error}=await sb.from('sales_visits').insert(rec);
   $('#spAssign').disabled=false;
   if(error){$('#spErr').textContent='มอบหมายไม่สำเร็จ: '+error.message;return;}
-  toast('✅ มอบหมาย '+spPicked.name+' แล้ว');spPicked=null;$('#spPicked').textContent='';$('#spSearch').value='';$('#spResults').innerHTML='';
+  toast('✅ มอบหมาย '+spPicked.name+' แล้ว');spPicked=null;$('#spPicked').textContent='';$('#spSearch').value='';$('#spResults').innerHTML='';resetSalesIcons();
   await loadSalesVisits();renderSalesList();
 };
 $('#spFilter').addEventListener('change',renderSalesList);

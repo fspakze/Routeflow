@@ -222,7 +222,8 @@
         </div>
         <div class="hint" style="margin:8px 0 4px">หรือ <b>คลิกหมุดบนแผนที่</b> เพื่อเลือกร้าน (หมุดสีเขียว ✓ = ร้านที่เลือก)</div>
         <div class="map-hold"><div id="spMap" style="height:340px;border-radius:12px;border:1px solid var(--line)"></div>
-          <button type="button" class="map-fs-btn" id="spFsBtn">⛶ เต็มจอ</button></div>
+          <button type="button" class="map-fs-btn" id="spFsBtn">⛶ เต็มจอ</button>
+          <button type="button" class="map-mode-btn" id="spModeBtn" title="สลับรวมร้าน/แสดงจุดจริง">⚫ ไม่รวม</button></div>
         <div class="err" id="spErr"></div>
       </div>
       <div class="card">
@@ -492,26 +493,74 @@ async function loadSalesVisits(){
   const{data,error}=await sb.from('sales_visits').select('*, customers(name,code)').order('plan_date',{ascending:false}).limit(500);
   salesVisits=error?[]:(data||[]);
 }
-let spMap=null, spCluster=null, spMarkerById={};
+let spMap=null, spCluster=null, spFlat=null, spMarkerById={}, spHidden=new Set(), spCats=[], spCounts={}, spClusterMode=(localStorage.getItem('rf_sp_map_mode')!=='flat');
+function activeSpLayer(){return spClusterMode?spCluster:spFlat;}
 function buildSalesMap(){
   if(spMap){setTimeout(()=>spMap.invalidateSize(),60);return;}
   spMap=L.map('spMap',{preferCanvas:true}).setView([15.11,105.82],13);
   addBaseLayers(spMap);
-  if(!Object.keys(styleOf).length){loadStyles([...new Set(customers.map(c=>c.category||'(ไม่ระบุ)'))]);}
-  spCluster=L.markerClusterGroup({maxClusterRadius:45}); spMarkerById={};
+  const counts={}; customers.forEach(c=>{if(c.lat==null)return;const k=c.category||'(ไม่ระบุ)';counts[k]=(counts[k]||0)+1;});
+  const freq=Object.keys(counts).sort((a,b)=>counts[b]-counts[a]); loadStyles(freq);
+  spCats=freq.slice().sort((a,b)=>catRank(a)-catRank(b)||counts[b]-counts[a]); spCounts=counts;
+  spCluster=L.markerClusterGroup({maxClusterRadius:45}); spFlat=L.layerGroup(); spMarkerById={};
   customers.forEach(c=>{ if(c.lat==null)return;
     const cat=c.category||'(ไม่ระบุ)';
     const m=L.marker([c.lat,c.lng],{icon:makeIcon(styleOf[cat]||defaultStyle(0))});
     m.bindTooltip(c.name,{direction:'top'}); m.on('click',()=>pickSalesStore(c));
-    spMarkerById[c.id]=m; spCluster.addLayer(m);
+    spMarkerById[c.id]=m;
   });
-  spMap.addLayer(spCluster);
+  spMap.addLayer(activeSpLayer()); applySpVisibility(); updateSpModeBtn(); buildSpLegend();
   const withll=customers.filter(c=>c.lat!=null);
   if(withll.length){const lats=withll.map(c=>c.lat).sort((a,b)=>a-b),lngs=withll.map(c=>c.lng).sort((a,b)=>a-b);
     const q=(a,p)=>a[Math.min(a.length-1,Math.max(0,Math.floor(a.length*p)))];
     try{spMap.fitBounds([[q(lats,.02),q(lngs,.02)],[q(lats,.98),q(lngs,.98)]],{padding:[30,30],maxZoom:14});}catch(e){}}
   const fb=$('#spFsBtn'); if(fb)fb.onclick=()=>toggleMapFS(spMap,'spMap','spFsBtn');
+  const mb=$('#spModeBtn'); if(mb)mb.onclick=()=>setSpMode(!spClusterMode);
   setTimeout(()=>spMap.invalidateSize(),120);
+}
+function updateSpModeBtn(){const b=$('#spModeBtn');if(b)b.textContent=spClusterMode?'⚫ ไม่รวม':'🔵 รวม';}
+function applySpVisibility(){
+  const lay=activeSpLayer();
+  customers.forEach(c=>{ if(c.lat==null)return; const m=spMarkerById[c.id]; if(!m)return;
+    const vis=!spHidden.has(c.category||'(ไม่ระบุ)'), on=lay.hasLayer(m);
+    if(vis&&!on)lay.addLayer(m); if(!vis&&on)lay.removeLayer(m);
+  });
+}
+function setSpMode(on){
+  if(spClusterMode===on||!spMap)return;
+  const old=activeSpLayer(); spMap.removeLayer(old); old.clearLayers();
+  spClusterMode=on; localStorage.setItem('rf_sp_map_mode',on?'cluster':'flat');
+  spMap.addLayer(activeSpLayer()); applySpVisibility(); updateSpModeBtn();
+  if(spPicked){const pm=spMarkerById[spPicked.id];if(pm)pm.setIcon(makePickIcon());}
+}
+function toggleSpCat(c){ if(spHidden.has(c))spHidden.delete(c); else spHidden.add(c); applySpVisibility(); renderSpLegend(); }
+function buildSpLegend(){
+  const ctrl=L.control({position:'topright'});
+  ctrl.onAdd=function(){const d=L.DomUtil.create('div','legend');d.id='spLegend';
+    if(window.innerWidth<=820)d.classList.add('collapsed');
+    renderSpLegend(d);L.DomEvent.disableClickPropagation(d);L.DomEvent.disableScrollPropagation(d);return d;};
+  ctrl.addTo(spMap);
+}
+function renderSpLegend(d){
+  d=d||document.getElementById('spLegend'); if(!d)return;
+  const collapsed=d.classList.contains('collapsed'); d.innerHTML='';
+  const h=document.createElement('h4'); h.className='leg-h';
+  h.innerHTML=`<span>${collapsed?'▸':'▾'}</span><span>หมวด</span><span class="leg-sub">${collapsed?spCats.length+' หมวด · แตะเปิด':'คลิกชื่อ=ซ่อน'}</span>`;
+  h.addEventListener('click',()=>{d.classList.toggle('collapsed');renderSpLegend(d);});
+  d.appendChild(h);
+  const bar=document.createElement('div'); bar.className='leg-actions';
+  bar.innerHTML='<button class="leg-btn" data-a="all">✓ เปิดหมด</button><button class="leg-btn" data-a="none">✕ ปิดหมด</button>';
+  bar.querySelector('[data-a="all"]').onclick=()=>{spHidden.clear();applySpVisibility();renderSpLegend(d);};
+  bar.querySelector('[data-a="none"]').onclick=()=>{spCats.forEach(c=>spHidden.add(c));applySpVisibility();renderSpLegend(d);};
+  d.appendChild(bar);
+  spCats.forEach(c=>{
+    const st=styleOf[c]||defaultStyle(0),row=document.createElement('div');
+    row.className='lrow'+(spHidden.has(c)?' off':'');
+    row.innerHTML=`<span class="sw">${svgFor(st.shape,st.color,16)}</span><span class="nm">${esc(c)}</span><span class="cnt">${spCounts[c]}</span>`;
+    row.querySelector('.nm').onclick=()=>toggleSpCat(c);
+    row.querySelector('.sw').onclick=()=>toggleSpCat(c);
+    d.appendChild(row);
+  });
 }
 function makePickIcon(){const px=34;return L.divIcon({html:`<svg width="${px}" height="${px}" viewBox="0 0 24 24"><path d="M12 2 C7.6 2 4 5.6 4 10 c0 5.6 8 11.5 8 11.5 s8-5.9 8-11.5 C20 5.6 16.4 2 12 2 z" fill="#16a34a" stroke="#fff" stroke-width="1.6"/><path d="M8.3 10.3 l2.4 2.4 l4.2-4.5" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,className:'rf-sel',iconSize:[px,px],iconAnchor:[px/2,px]});}
 function resetSalesIcons(){Object.entries(spMarkerById).forEach(([id,m])=>{const cu=customers.find(x=>String(x.id)===id);const cat=cu?(cu.category||'(ไม่ระบุ)'):'(ไม่ระบุ)';m.setIcon(makeIcon(styleOf[cat]||defaultStyle(0)));});}

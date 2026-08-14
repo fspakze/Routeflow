@@ -79,6 +79,7 @@
 
   <main id="main" style="display:none">
     <div id="vmap"></div>
+    <button class="btn ghost sm" id="myLocBtn" style="width:100%;margin-bottom:10px">📍 แสดงตำแหน่งฉัน + ร้านใกล้เคียง</button>
     <div class="tabs" id="tabs">
       <button data-f="today" class="active">วันนี้</button>
       <button data-f="upcoming">กำหนดการ</button>
@@ -111,9 +112,22 @@
 <!-- Add walk-in visit -->
 <div class="modal" id="addModal"><div class="sheet">
   <h3>เพิ่มการเข้าพบ</h3>
-  <label>ค้นหาร้าน (ชื่อ/รหัส/เบอร์)</label><input id="addSearch" placeholder="พิมพ์เพื่อค้นหา">
-  <div class="clist" id="addList"></div>
-  <div id="addPicked" class="muted" style="font-size:13px;margin-top:8px"></div>
+  <div class="tabs" id="addTabs" style="margin-bottom:8px">
+    <button data-m="existing" class="active">ร้านที่มีอยู่</button>
+    <button data-m="new">➕ ร้านใหม่</button>
+  </div>
+  <div id="addExisting">
+    <label>ค้นหาร้าน (ชื่อ/รหัส/เบอร์)</label><input id="addSearch" placeholder="พิมพ์เพื่อค้นหา">
+    <div class="clist" id="addList"></div>
+    <div id="addPicked" class="muted" style="font-size:13px;margin-top:8px"></div>
+  </div>
+  <div id="addNew" style="display:none">
+    <label>ชื่อร้านใหม่ *</label><input id="n_name" placeholder="ชื่อร้าน">
+    <label>เบอร์โทร</label><input id="n_phone" inputmode="tel">
+    <div style="margin-top:10px"><button class="btn ghost sm" id="n_gps" type="button" style="width:100%">📍 ใช้ตำแหน่งปัจจุบันของฉันเป็นพิกัดร้าน</button></div>
+    <div id="n_coord" class="muted" style="font-size:12px;margin-top:6px">ยังไม่ได้จับพิกัด — กดปุ่มด้านบนตอนยืนอยู่หน้าร้าน</div>
+    <div id="n_near" style="font-size:12px;margin-top:6px"></div>
+  </div>
   <label>วัตถุประสงค์</label>
   <select id="a_purpose"><option>เสนอขายสินค้า</option><option>แนะนำสินค้าใหม่</option><option>ติดตามลูกค้า</option><option>เก็บเงิน</option><option>สำรวจร้าน</option><option>อื่น ๆ</option></select>
   <label>วันที่ (ปล่อยว่าง = วันนี้)</label><input id="a_date" type="date">
@@ -131,7 +145,8 @@
 <script src="config.js"></script>
 <script>
 const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
-let sb=null,me=null,visits=[],customers=[],filter='today',vmap=null,vlayer=null,curVisit=null,pickedCust=null;
+let sb=null,me=null,visits=[],customers=[],filter='today',vmap=null,vlayer=null,custLayer=null,meLayer=null,curVisit=null,pickedCust=null;
+let addMode='existing',newCoord=null;
 const RF_DOMAIN='routeflow.local';
 function idToEmail(v){v=(v||'').trim().toLowerCase();return v?(v.includes('@')?v:v.replace(/\s+/g,'')+'@'+RF_DOMAIN):'';}
 function esc(s){return(s==null?'':String(s)).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
@@ -178,11 +193,34 @@ function initMap(){
   streets.addTo(vmap);
   L.control.layers({'🗺️ แบบปัจจุบัน':streets,'🛰️ ดาวเทียม':sat},null,{position:'bottomleft',collapsed:true}).addTo(vmap);
   vlayer=L.layerGroup().addTo(vmap);
+  custLayer=L.layerGroup().addTo(vmap);   // ร้านทั้งหมด (จุดเล็ก) ไว้เช็คว่ามีร้านตรงนี้แล้วหรือยัง
+  meLayer=L.layerGroup().addTo(vmap);     // ตำแหน่งฉัน
+}
+function drawCustomerDots(){
+  if(!custLayer)return; custLayer.clearLayers();
+  customers.forEach(c=>{ if(c.lat==null)return;
+    L.circleMarker([c.lat,c.lng],{radius:3,color:'#6b7280',weight:1,fillColor:'#9ca3af',fillOpacity:.7})
+     .bindTooltip(c.name).addTo(custLayer);
+  });
 }
 async function loadCustomers(){
   const{data}=await sb.from('customers').select('id,name,code,category,phone,lat,lng').not('lat','is',null).limit(5000);
-  customers=data||[];
+  customers=data||[]; drawCustomerDots();
 }
+$('#myLocBtn').onclick=()=>{
+  if(!navigator.geolocation){toast('อุปกรณ์ไม่รองรับ GPS');return;}
+  toast('กำลังหาตำแหน่ง...');
+  navigator.geolocation.getCurrentPosition(p=>{
+    const lat=p.coords.latitude,lng=p.coords.longitude,acc=p.coords.accuracy||30;
+    meLayer.clearLayers();
+    L.circle([lat,lng],{radius:acc,color:'#2563eb',weight:1,fillColor:'#3b82f6',fillOpacity:.12}).addTo(meLayer);
+    L.circleMarker([lat,lng],{radius:8,color:'#fff',weight:3,fillColor:'#2563eb',fillOpacity:1}).bindTooltip('ตำแหน่งฉัน',{permanent:false}).addTo(meLayer);
+    vmap.setView([lat,lng],17);
+    // ร้านใกล้เคียงในรัศมี 60 ม.
+    const near=customers.filter(c=>c.lat!=null).map(c=>({c,d:haversine(lat,lng,c.lat,c.lng)})).filter(x=>x.d<60).sort((a,b)=>a.d-b.d);
+    toast(near.length?`มีร้านในระบบใกล้คุณ ${near.length} ร้าน (ใกล้สุด ${Math.round(near[0].d)} ม.: ${near[0].c.name})`:'ไม่มีร้านในระบบใกล้ ๆ นี้ — อาจเป็นร้านใหม่');
+  },e=>toast('อ่านตำแหน่งไม่ได้: '+e.message),{enableHighAccuracy:true,timeout:10000});
+};
 async function loadVisits(){
   const{data,error}=await sb.from('sales_visits')
     .select('*, customers(id,name,code,phone,address,lat,lng,category)')
@@ -299,8 +337,27 @@ $('#formSave').onclick=async()=>{
 };
 
 /* ----- add walk-in visit ----- */
-$('#addBtn').onclick=()=>{pickedCust=null;$('#addPicked').textContent='';$('#addSearch').value='';$('#addList').innerHTML='';$('#a_date').value='';$('#addErr').textContent='';$('#addModal').classList.add('open');};
+function setAddMode(m){addMode=m;
+  $$('#addTabs button').forEach(b=>b.classList.toggle('active',b.dataset.m===m));
+  $('#addExisting').style.display=m==='existing'?'':'none';
+  $('#addNew').style.display=m==='new'?'':'none';
+}
+$$('#addTabs button').forEach(b=>b.onclick=()=>setAddMode(b.dataset.m));
+$('#addBtn').onclick=()=>{pickedCust=null;newCoord=null;setAddMode('existing');
+  $('#addPicked').textContent='';$('#addSearch').value='';$('#addList').innerHTML='';$('#a_date').value='';$('#addErr').textContent='';
+  $('#n_name').value='';$('#n_phone').value='';$('#n_coord').textContent='ยังไม่ได้จับพิกัด — กดปุ่มด้านบนตอนยืนอยู่หน้าร้าน';$('#n_near').textContent='';
+  $('#addModal').classList.add('open');};
 $('#addCancel').onclick=()=>$('#addModal').classList.remove('open');
+$('#n_gps').onclick=()=>{
+  if(!navigator.geolocation){toast('อุปกรณ์ไม่รองรับ GPS');return;}
+  $('#n_coord').textContent='กำลังหาตำแหน่ง...';
+  navigator.geolocation.getCurrentPosition(p=>{
+    newCoord={lat:p.coords.latitude,lng:p.coords.longitude};
+    $('#n_coord').innerHTML='พิกัด: <b>'+newCoord.lat.toFixed(6)+', '+newCoord.lng.toFixed(6)+'</b> ✓';
+    const near=customers.filter(c=>c.lat!=null).map(c=>({c,d:haversine(newCoord.lat,newCoord.lng,c.lat,c.lng)})).filter(x=>x.d<60).sort((a,b)=>a.d-b.d);
+    $('#n_near').innerHTML=near.length?`<span style="color:#b45309">⚠️ มีร้านในระบบใกล้จุดนี้: <b>${esc(near[0].c.name)}</b> (ห่าง ${Math.round(near[0].d)} ม.) — แน่ใจว่าเป็นร้านใหม่?</span>`:'<span style="color:#166534">ยังไม่มีร้านในระบบใกล้จุดนี้ ✓</span>';
+  },e=>{$('#n_coord').textContent='อ่านตำแหน่งไม่ได้: '+e.message;},{enableHighAccuracy:true,timeout:10000});
+};
 $('#addSearch').addEventListener('input',()=>{
   const q=$('#addSearch').value.trim().toLowerCase();const digits=q.replace(/\D/g,'');
   if(!q){$('#addList').innerHTML='';return;}
@@ -309,13 +366,30 @@ $('#addSearch').addEventListener('input',()=>{
   $('#addList').querySelectorAll('[data-id]').forEach(el=>el.onclick=()=>{pickedCust=customers.find(x=>String(x.id)===el.dataset.id);$('#addPicked').innerHTML='เลือก: <b>'+esc(pickedCust.name)+'</b>';});
 });
 $('#addSave').onclick=async()=>{
-  if(!pickedCust){$('#addErr').textContent='เลือกร้านก่อน';return;}
-  const rec={customer_id:pickedCust.id,sales_id:me.id,plan_date:$('#a_date').value||today(),purpose:$('#a_purpose').value,status:'planned',created_by:me.id};
+  $('#addErr').textContent='';
+  let custId=null;
   $('#addSave').disabled=true;
-  const{error}=await sb.from('sales_visits').insert(rec);
+  try{
+    if(addMode==='new'){
+      const name=$('#n_name').value.trim();
+      if(!name){$('#addErr').textContent='ใส่ชื่อร้านใหม่';$('#addSave').disabled=false;return;}
+      if(!newCoord){$('#addErr').textContent='กดปุ่มจับพิกัดปัจจุบันก่อน (ยืนอยู่หน้าร้าน)';$('#addSave').disabled=false;return;}
+      const crec={name,phone:$('#n_phone').value.trim()||null,lat:newCoord.lat,lng:newCoord.lng,
+        category:'ร้านใหม่ (Sales)',source:'sales_new',is_active:true,verified:false};
+      const{data:nc,error:ce}=await sb.from('customers').insert(crec).select('id,name,code,category,phone,lat,lng').single();
+      if(ce)throw ce;
+      custId=nc.id; customers.push(nc); drawCustomerDots();
+    }else{
+      if(!pickedCust){$('#addErr').textContent='เลือกร้านก่อน';$('#addSave').disabled=false;return;}
+      custId=pickedCust.id;
+    }
+    const rec={customer_id:custId,sales_id:me.id,plan_date:$('#a_date').value||today(),purpose:$('#a_purpose').value,status:'planned',created_by:me.id};
+    const{error}=await sb.from('sales_visits').insert(rec);
+    if(error)throw error;
+    $('#addModal').classList.remove('open');toast('✅ เพิ่มการเข้าพบแล้ว'+(addMode==='new'?' (สร้างร้านใหม่ให้แล้ว)':''));
+    await loadVisits();
+  }catch(e){$('#addErr').textContent='เพิ่มไม่สำเร็จ: '+(e.message||e);}
   $('#addSave').disabled=false;
-  if(error){$('#addErr').textContent='เพิ่มไม่สำเร็จ: '+error.message;return;}
-  $('#addModal').classList.remove('open');toast('✅ เพิ่มการเข้าพบแล้ว');await loadVisits();
 };
 </script>
 <script>if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js').catch(function(){});</script>

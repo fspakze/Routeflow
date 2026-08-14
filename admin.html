@@ -487,6 +487,7 @@ $('#histReload').onclick=()=>loadAll();
 /* ---------- แผนเยี่ยมร้าน (Sales CRM) ---------- */
 let salesVisits=[], spPicked=null;
 const SV_STATUS={planned:'📋 วางแผน',checked_in:'📍 เช็คอินแล้ว',done:'✅ เสร็จ',skipped:'✖ ข้าม'};
+function spLocalToday(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 function salesPeople(){return crew.filter(c=>c.role==='sales'&&c.is_active!==false);}
 function salesName(id){const c=crew.find(x=>x.id===id);return c?c.full_name:null;}
 async function loadSalesVisits(){
@@ -574,7 +575,7 @@ function renderSalesPlan(){
   const sp=salesPeople();
   $('#spSales').innerHTML=sp.length?sp.map(s=>`<option value="${s.id}">${esc(s.full_name)}</option>`).join(''):'<option value="">— ยังไม่มีพนักงานขาย (เพิ่มที่ ตั้งค่าพนักงาน) —</option>';
   $('#spFilter').innerHTML='<option value="">— ทุกคน —</option>'+sp.map(s=>`<option value="${s.id}">${esc(s.full_name)}</option>`).join('');
-  if(!$('#spDate').value)$('#spDate').value=new Date().toISOString().slice(0,10);
+  if(!$('#spDate').value)$('#spDate').value=spLocalToday();
   renderSalesList();
 }
 function renderSalesList(){
@@ -605,7 +606,7 @@ $('#spAssign').onclick=async()=>{
   $('#spErr').textContent='';
   if(!spPicked){$('#spErr').textContent='ค้นหาแล้วเลือกร้านก่อน';return;}
   const sid=$('#spSales').value;if(!sid){$('#spErr').textContent='เลือกพนักงานขาย';return;}
-  const rec={customer_id:spPicked.id,sales_id:sid,plan_date:$('#spDate').value||new Date().toISOString().slice(0,10),purpose:$('#spPurpose').value,status:'planned',created_by:me.id};
+  const rec={customer_id:spPicked.id,sales_id:sid,plan_date:$('#spDate').value||spLocalToday(),purpose:$('#spPurpose').value,status:'planned',created_by:me.id};
   $('#spAssign').disabled=true;
   const{error}=await sb.from('sales_visits').insert(rec);
   $('#spAssign').disabled=false;

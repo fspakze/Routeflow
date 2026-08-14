@@ -81,7 +81,7 @@
     <div id="vmap"></div>
     <button class="btn ghost sm" id="myLocBtn" style="width:100%;margin-bottom:10px">📍 แสดงตำแหน่งฉัน + ร้านใกล้เคียง</button>
     <div class="tabs" id="tabs">
-      <button data-f="today" class="active">วันนี้</button>
+      <button data-f="today" class="active">วันนี้ / ค้าง</button>
       <button data-f="upcoming">กำหนดการ</button>
       <button data-f="done">เสร็จแล้ว</button>
     </div>
@@ -151,7 +151,7 @@ const RF_DOMAIN='routeflow.local';
 function idToEmail(v){v=(v||'').trim().toLowerCase();return v?(v.includes('@')?v:v.replace(/\s+/g,'')+'@'+RF_DOMAIN):'';}
 function esc(s){return(s==null?'':String(s)).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
 let tT;function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('show');clearTimeout(tT);tT=setTimeout(()=>t.classList.remove('show'),2800);}
-const today=()=>new Date().toISOString().slice(0,10);
+const today=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');};
 function haversine(a,b,c,d){const R=6371000,r=x=>x*Math.PI/180;const dLa=r(c-a),dLo=r(d-b);const s=Math.sin(dLa/2)**2+Math.cos(r(a))*Math.cos(r(c))*Math.sin(dLo/2)**2;return 2*R*Math.asin(Math.sqrt(s));}
 
 $('#loginBtn').onclick=login;$('#password').addEventListener('keydown',e=>{if(e.key==='Enter')login();});
@@ -235,8 +235,8 @@ function statusBadge(s){const L={planned:'วางแผน',checked_in:'เช
 function render(){
   const t=today();
   let rows=visits.slice();
-  if(filter==='today')rows=rows.filter(v=>(v.plan_date||'')===t && v.status!=='done');
-  else if(filter==='upcoming')rows=rows.filter(v=>(v.plan_date||'')>t && v.status!=='done');
+  if(filter==='today')rows=rows.filter(v=>(!v.plan_date||v.plan_date<=t) && v.status!=='done');   // วันนี้ + ค้าง/เลยกำหนด
+  else if(filter==='upcoming')rows=rows.filter(v=>v.plan_date && v.plan_date>t && v.status!=='done');
   else rows=rows.filter(v=>v.status==='done');
   // map markers (today planned/checked_in)
   if(vlayer){vlayer.clearLayers();const pts=[];
@@ -247,7 +247,11 @@ function render(){
     if(pts.length)try{vmap.fitBounds(pts,{padding:[30,30],maxZoom:15});}catch(e){}
   }
   const host=$('#list');
-  if(!rows.length){host.innerHTML='<div class="card muted" style="text-align:center">ไม่มีรายการ</div>';return;}
+  if(!rows.length){
+    let hint='ไม่มีรายการ';
+    if(filter==='today'){const up=visits.filter(v=>v.plan_date&&v.plan_date>t&&v.status!=='done').length;if(up)hint=`ไม่มีงานวันนี้ · มีงานวันข้างหน้า <b>${up}</b> รายการ → ดูแท็บ "กำหนดการ"`;}
+    host.innerHTML='<div class="card muted" style="text-align:center">'+hint+'</div>';return;
+  }
   host.innerHTML=rows.map(v=>{
     const c=v.customers||{};
     const crm=(v.status==='done')?`<div class="crm">
